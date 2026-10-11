@@ -1,0 +1,5 @@
+[scan]
+paths = ["radicale"]
+exclude = ["radicale/tests"]
+min_severity = "MEDIUM"
+bandit_version = "1.9.4"
