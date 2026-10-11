@@ -1,0 +1,14 @@
+[scan]
+paths = ["testcode/BenchmarkTest000*.py"]
+exclude = []
+min_severity = "MEDIUM"
+bandit_version = "1.9.4"
+
+[model]
+provider = "openai"
+name = "gpt-6-luna"
+
+[budget]
+max_tokens = 500000
+output_allowance = 4000
+max_steps = 300

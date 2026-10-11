@@ -1,1 +1,6 @@
 targets/
+.venv/
+.env
+*.egg-info/
+__pycache__/
+runs/test/
