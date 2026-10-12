@@ -4,9 +4,15 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = ["openai", "python-dotenv", "jsonschema", "bandit==1.9.4"]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.scripts]
 vulnagent = "vulnagent.cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

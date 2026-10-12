@@ -1,4 +1,4 @@
-"""Append-only run trace: one JSON event per line in trace.jsonl."""
+"""Append-only run trace: one JSON event per line in trace.jsonl"""
 
 import json
 import time

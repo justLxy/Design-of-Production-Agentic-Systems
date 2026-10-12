@@ -71,7 +71,7 @@ def run_bandit(input_dir: Path, scan: dict) -> list[dict]:
 
     paths = expand_paths(input_dir, scan["paths"])
 
-    # Write the JSON report to a temp dir: the agent never writes to the target.
+    # Write the JSON report to a temp dir
     with tempfile.TemporaryDirectory() as tmp:
         out_file = Path(tmp) / "bandit.json"
         cmd = build_command(scan, paths, out_file)
