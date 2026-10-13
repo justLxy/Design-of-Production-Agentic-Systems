@@ -73,8 +73,8 @@ class Trace:
 
     # One helper per kind
 
-    def model_call(self, alert_id: str | None, role: str, model: str, usage: dict) -> dict:
-        event = self.emit(EventKind.MODEL_CALL, alert_id, role=role, model=model, usage=usage)
+    def model_call(self, alert_id: str | None, role: str, model: str, usage: dict, **extra) -> dict:
+        event = self.emit(EventKind.MODEL_CALL, alert_id, role=role, model=model, usage=usage, **extra)
         for key, value in usage.items():
             self._usage_total[key] = self._usage_total.get(key, 0) + value
         return event
