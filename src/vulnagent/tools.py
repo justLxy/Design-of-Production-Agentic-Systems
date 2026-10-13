@@ -109,3 +109,15 @@ def list_dir(ws: Workspace, path: str = ".") -> str:
     if len(names) > MAX_LIST_ENTRIES:
         text += f"\n[{len(names) - MAX_LIST_ENTRIES} more entries not shown]"
     return text
+
+def submit(ws: Workspace, label: int, rationale: str, evidence: list[dict]) -> str:
+    """Validate a final answer: every evidence range must exist in the workspace copy."""
+    for item in evidence:
+        path, start, end = item["path"], item["start_line"], item["end_line"]
+        file = ws.resolve(path)
+        if not file.is_file():
+            raise ToolError(f"evidence file not found: {path}")
+        total = len(_read_lines(file, path))
+        if not 1 <= start <= end <= total:
+            raise ToolError(f"evidence lines {start}-{end} are not within {path} (lines 1-{total})")
+    return f"Accepted: label {label} with {len(evidence)} evidence range(s)."

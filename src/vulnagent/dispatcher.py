@@ -80,6 +80,37 @@ TOOLS: dict[str, Tool] = {tool.name: tool for tool in [
         },
         run=tools.list_dir,
     ),
+    Tool(
+        name="submit",
+        description=("Submit the final label for the current alert. "
+                     "This ends the investigation of the alert."),
+        parameters={
+            "type": "object",
+            "properties": {
+                "label": {"type": "integer", "enum": [0, 1],
+                          "description": "1 = potential vulnerability, 0 = not a vulnerability."},
+                "rationale": {"type": "string", "minLength": 1, "maxLength": 2000,
+                              "description": "One to three sentences that cite the line numbers you read."},
+                "evidence": {
+                    "type": "array", "minItems": 1, "maxItems": 5,
+                    "description": "The line ranges you read and relied on.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string", "minLength": 1},
+                            "start_line": {"type": "integer", "minimum": 1},
+                            "end_line": {"type": "integer", "minimum": 1},
+                        },
+                        "required": ["path", "start_line", "end_line"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            "required": ["label", "rationale", "evidence"],
+            "additionalProperties": False,
+        },
+        run=tools.submit,
+    ),
 ]}
 
 

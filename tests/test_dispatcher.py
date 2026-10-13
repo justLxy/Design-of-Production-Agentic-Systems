@@ -95,5 +95,5 @@ def test_a_crashing_tool_still_writes_its_result(setup, monkeypatch):
 
 def test_specs_use_the_responses_function_format():
     specs = Dispatcher.specs()
-    assert {s["name"] for s in specs} == {"read_file", "search", "list_dir"}
+    assert {s["name"] for s in specs} == {"read_file", "search", "list_dir", "submit"}
     assert all(s["type"] == "function" and "parameters" in s for s in specs)

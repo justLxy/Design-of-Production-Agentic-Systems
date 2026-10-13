@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from vulnagent.tools import (MAX_READ_LINES, MAX_SEARCH_MATCHES, ToolError,
-                             list_dir, read_file, search)
+                             list_dir, read_file, search, submit)
 from vulnagent.workspace import PathEscapeError, Workspace
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -82,3 +82,16 @@ def test_list_dir_hides_git_and_the_answer_key(ws):
 def test_list_dir_refuses_a_file(ws):
     with pytest.raises(ToolError, match="not a directory"):
         list_dir(ws, CASE)
+
+def test_submit_accepts_evidence_inside_a_file(ws):
+    evidence = [{"path": CASE, "start_line": 45, "end_line": 48}]
+    assert submit(ws, 0, "Parameterised query.", evidence).startswith("Accepted")
+
+
+@pytest.mark.parametrize("evidence", [
+    {"path": CASE, "start_line": 50, "end_line": 999},                          # past the end of the file
+    {"path": "testcode/BenchmarkTest00012.py", "start_line": 1, "end_line": 2},  # a withheld sibling
+])
+def test_submit_refuses_evidence_that_does_not_exist(ws, evidence):
+    with pytest.raises(ToolError):
+        submit(ws, 0, "Some rationale.", [evidence])
