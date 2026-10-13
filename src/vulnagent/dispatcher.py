@@ -31,9 +31,9 @@ class Observation:
     ok: bool
     text: str
 
-    def as_message(self) -> dict:
-        """The tool message appended to the conversation."""
-        return {"role": "tool", "tool_call_id": self.tool_call_id, "content": self.text}
+    def as_item(self) -> dict:
+        """The function_call_output item appended to the conversation."""
+        return {"type": "function_call_output", "call_id": self.tool_call_id, "output": self.text}
 
 
 TOOLS: dict[str, Tool] = {tool.name: tool for tool in [
@@ -90,10 +90,10 @@ class Dispatcher:
 
     @staticmethod
     def specs() -> list[dict]:
-        """Tool definitions in the OpenAI function-calling format."""
+        """Tool definitions in the Responses API function format."""
         return [
-            {"type": "function",
-             "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
+            {"type": "function", "name": t.name, "description": t.description,
+             "parameters": t.parameters}
             for t in TOOLS.values()
         ]
 

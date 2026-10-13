@@ -8,6 +8,7 @@ bandit_version = "1.9.4"
 [model]
 provider = "openai"
 name = "gpt-6-luna"
+reasoning_effort = "low"
 
 [budget]
 max_tokens = 500000

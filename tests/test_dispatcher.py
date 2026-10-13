@@ -93,7 +93,7 @@ def test_a_crashing_tool_still_writes_its_result(setup, monkeypatch):
     assert last["kind"] == "tool_result" and last["ok"] is False
 
 
-def test_specs_use_the_openai_function_format():
+def test_specs_use_the_responses_function_format():
     specs = Dispatcher.specs()
-    assert {s["function"]["name"] for s in specs} == {"read_file", "search", "list_dir"}
-    assert all(s["type"] == "function" and "parameters" in s["function"] for s in specs)
+    assert {s["name"] for s in specs} == {"read_file", "search", "list_dir"}
+    assert all(s["type"] == "function" and "parameters" in s for s in specs)
