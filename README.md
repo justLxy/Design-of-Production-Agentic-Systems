@@ -36,8 +36,8 @@ python3.12 -m venv .venv
 `requirements.lock` pins all dependencies, including `bandit==1.9.4`.
 
 The agent reads one environment variable, `OPENAI_API_KEY`. You can export it in the shell,
-or put a line `OPENAI_API_KEY=...` in a file called `.env` at the repository root (the
-agent loads it with python-dotenv, and `.env` is in `.gitignore`). A key that is already
+or copy `.env.example` to `.env` at the repository root and fill in the key (the agent
+loads it with python-dotenv, and `.env` is in `.gitignore`). A key that is already
 exported in the shell wins over the one in `.env`.
 
 ## Targets
