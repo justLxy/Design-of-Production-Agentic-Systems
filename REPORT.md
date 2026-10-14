@@ -112,11 +112,13 @@ conversation is not carried into the next alert.
 
 All model tools go through the dispatcher. It parses the arguments as JSON, checks that
 the tool exists, validates the arguments against the tool's JSON Schema (the same schema I
-send to the model), runs the tool, and writes the `tool_request` / `tool_result` pair. Any
-problem goes back to the model as an observation starting with `REFUSED:` instead of
-crashing the run. Every path argument goes through `Workspace.resolve`, which refuses
-absolute paths, any path containing `..`, and any path that ends up outside the copy after
-following symlinks.
+send to the model), runs the tool, and writes the `tool_request` / `tool_result` pair. A
+bad request (unknown tool, invalid JSON, wrong arguments, a path outside the copy, or
+anything else the tool refuses) goes back to the model as an observation starting with
+`REFUSED:` instead of crashing the run. An unexpected exception inside a tool is still
+recorded as a failed `tool_result` and then ends the run as `crashed`. Every path argument
+goes through `Workspace.resolve`, which refuses absolute paths, any path containing `..`,
+and any path that ends up outside the copy after following symlinks.
 
 `read_file(path, start_line=1, end_line=None)` returns the requested lines with line
 numbers and a header such as `radicale/auth/oauth2.py, lines 1-71 of 71`. It returns at
