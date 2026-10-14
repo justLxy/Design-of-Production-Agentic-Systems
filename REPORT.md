@@ -249,10 +249,6 @@ block swapped in, and each run folder also has the `config.toml` it used. The se
 | sglang-low | budget_exhausted | 54,854 | 2 | 0 | 19 |
 | owasp-full | completed | 95,257 | 8 | 10 | 0 |
 | owasp-low | budget_exhausted | 55,878 | 3 | 9 | 6 |
-
-All six pass my checker, which checks the trace schema, the six invariants, the
-report schema, the row count and order, and that `used_tokens` equals the trace sum.
-
 ### OWASP precision and recall
 
 I scored the OWASP runs against `expectedresults-0.1.csv` (18
