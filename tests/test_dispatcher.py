@@ -1,4 +1,4 @@
-"""Tests for the dispatcher (B3)."""
+"""Tests for the dispatcher."""
 
 import json
 from dataclasses import replace

@@ -3,7 +3,7 @@
 Run level (every target): .git/ and expectedresults*.csv are never copied in;
 nor is a top-level results/ (OWASP ships other scanners' findings there).
 
-resolve() is the agent's security boundary: every tool calls it before touching disk.
+Every tool checks its paths with resolve() before reading anything.
 """
 
 import shutil

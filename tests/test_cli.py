@@ -1,4 +1,4 @@
-"""End-to-end runs of the command line on OWASP with a fake model (B9, B10). No network calls."""
+"""End-to-end runs of the command line on OWASP with a fake model. No network calls."""
 
 import json
 import re
@@ -67,7 +67,7 @@ def run_cli(tmp_path, monkeypatch, model, max_tokens=1_000_000, input_dir=OWASP)
 
 
 def load(out: Path) -> tuple[dict, list[dict]]:
-    """Read the run's outputs and check every invariant the graders check."""
+    """Read the run's outputs and run the same checks as check_run.py."""
     events = [json.loads(line) for line in (out / "trace.jsonl").read_text().splitlines()]
     report = json.loads((out / "report.json").read_text())
     assert check_trace(events) == []

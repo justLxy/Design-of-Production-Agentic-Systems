@@ -1,4 +1,4 @@
-"""Tests for the agent graph (B4, B7, B8) with a scripted model. No network calls."""
+"""Tests for the agent loop with a scripted model. No network calls."""
 
 import itertools
 import json
@@ -79,7 +79,7 @@ def run(tmp_path, replies, alerts=(A11, A12), max_tokens=1_000_000, max_steps=10
     events = [json.loads(line) for line in trace_path.read_text().splitlines()]
     assert check_trace(events) == []
     settles = [e["alert_id"] for e in events if e["kind"] == "state_change" and "alert_status" in e]
-    assert sorted(settles) == sorted(a["alert_id"] for a in alerts)  # invariant 5: once each
+    assert sorted(settles) == sorted(a["alert_id"] for a in alerts)  # each alert is settled exactly once
     return status, agent.rows, events, model
 
 

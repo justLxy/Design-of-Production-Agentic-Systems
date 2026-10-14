@@ -1,5 +1,4 @@
-"""OpenAI Responses API client: one call per model step, usage exactly as the provider reports it.
-"""
+"""Client for the OpenAI Responses API."""
 
 from dataclasses import dataclass
 from typing import Any
@@ -26,7 +25,7 @@ class ModelReply:
 
 
 def usage_from(raw: Any) -> dict[str, int]:
-    """Map the Responses API usage object to the trace's counters. No summed total."""
+    """Convert the API usage object to the counters used in the trace (no total)."""
     usage = {"input": raw.input_tokens, "output": raw.output_tokens}
     details = getattr(raw, "input_tokens_details", None)
     if details is not None:

@@ -1,4 +1,4 @@
-"""Tests for the workspace boundary and withholding (B2)."""
+"""Tests for the workspace copy, the path check and the hidden files."""
 
 import os
 from pathlib import Path

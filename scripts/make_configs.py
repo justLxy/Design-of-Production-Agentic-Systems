@@ -1,5 +1,5 @@
 """Write configs/runs/<target>-<budget>.toml: configs/full.toml and configs/low.toml
-with each staff [scan] block swapped in and everything else kept, as the graders do.
+with each staff [scan] block swapped in and everything else kept.
 
 Usage: python scripts/make_configs.py
 """

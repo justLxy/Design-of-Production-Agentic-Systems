@@ -9,7 +9,7 @@ UNKNOWN_COMMIT = "0" * 40
 
 
 def target_commit(input_dir: Path) -> str:
-    """HEAD of the target checkout. git reads the original --input; nothing is written."""
+    """Commit hash of the target checkout (git only reads here)."""
     try:
         proc = subprocess.run(["git", "-C", str(input_dir), "rev-parse", "HEAD"],
                               capture_output=True, text=True, check=True)
@@ -35,7 +35,7 @@ def build_report(input_arg: str, commit: str, scan: dict, alerts: list[dict],
 
 
 def write_report(path: Path, report: dict) -> None:
-    """Write atomically: a crash mid-write never leaves a half-written report.json."""
+    """Write to a temp file first and then rename it."""
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(report, indent=2) + "\n")
     os.replace(tmp, path)

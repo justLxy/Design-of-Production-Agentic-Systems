@@ -1,7 +1,7 @@
-"""The agent graph: a bounded tool-use loop for each alert.
+"""Main agent loop: one tool-use loop per alert.
 
-Before every model call the runtime checks max_steps, then the budget.
-tools and nudge feed the no-progress detector. Any of the three stops the run.
+Before every model call it checks max_steps, then the budget. The tools and
+nudge steps update the no-progress counter. Any of these three can stop the run.
 """
 
 import json
@@ -92,7 +92,7 @@ class Agent:
                     self._route(s, reply)
 
     def _triage(self, s: AlertState) -> ModelReply | None:
-        """Model node: the failsafe and budget checks, then one model call."""
+        """Check max_steps and the budget, then make one model call."""
         aid = s.alert["alert_id"]
         if self.steps >= self.max_steps:
             self.trace.routing(aid, "max_steps", by="runtime", steps=self.steps)
@@ -118,7 +118,7 @@ class Agent:
         return reply
 
     def _route(self, s: AlertState, reply: ModelReply) -> None:
-        """Edge after the model node: the model's reply decides, unless it is unusable."""
+        """Decide where to go after a model reply."""
         aid = s.alert["alert_id"]
         if reply.tool_calls:
             submits = any(c.name == "submit" for c in reply.tool_calls)
@@ -135,7 +135,7 @@ class Agent:
             self.trace.routing(aid, "triage", by="runtime")
 
     def _run_tools(self, s: AlertState, calls: list[ToolCall]) -> None:
-        """Tools node: the dispatcher runs each request in order; submit is checked here too."""
+        """Run the tool calls from one reply in order. submit is handled here too."""
         aid = s.alert["alert_id"]
         progressed = False
         for i, call in enumerate(calls):
@@ -158,7 +158,7 @@ class Agent:
         self.trace.routing(aid, "triage", by="runtime")
 
     def _track_progress(self, s: AlertState, progressed: bool) -> None:
-        """No-progress failsafe: too many consecutive turns without new information."""
+        """Stop the run after too many turns in a row without new information."""
         s.stalled = 0 if progressed else s.stalled + 1
         if s.stalled >= NO_PROGRESS_LIMIT:
             self.trace.routing(s.alert["alert_id"], "no_progress", by="runtime", stalled_turns=s.stalled)

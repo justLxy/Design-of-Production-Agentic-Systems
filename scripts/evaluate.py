@@ -1,6 +1,6 @@
 """Score an OWASP report.json against the benchmark's answer key.
 
-For the developers only: the agent never reads the key (it is withheld from its workspace).
+Only for checking results by hand. The agent never sees the key.
 Usage: python scripts/evaluate.py <report.json> [<expectedresults.csv>]
 """
 

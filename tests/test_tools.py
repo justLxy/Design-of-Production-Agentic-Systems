@@ -1,4 +1,4 @@
-"""Tests for the read-only tools (B2)."""
+"""Tests for the read-only tools."""
 
 from pathlib import Path
 

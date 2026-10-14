@@ -1,8 +1,7 @@
-"""The dispatcher: the only path from a model's tool request to a tool.
+"""Dispatcher for the model's tool requests.
 
-It validates every request, runs it, records the tool_request/tool_result pair
-in the trace, and builds the observation. Only the dispatcher creates
-observations; the model never writes one.
+It checks each request, runs the tool, writes the tool_request/tool_result
+pair to the trace, and builds the function_call_output for the model.
 """
 
 import json
@@ -129,7 +128,7 @@ class Dispatcher:
         ]
 
     def dispatch(self, alert_id: str, call_id: str, name: str, raw_args: str) -> Observation:
-        """Validate and run one tool request. Refusals come back as observations, never raised."""
+        """Check and run one tool request. A refusal is returned, not raised."""
         name = name or "(missing)"
         args, problem = self._parse(raw_args)
         self.trace.tool_request(alert_id, name, args)
@@ -143,7 +142,7 @@ class Dispatcher:
         except (*tools.REFUSALS, OSError, ValueError, TypeError) as e:
             return self._refuse(alert_id, call_id, name, str(e))
         except BaseException as e:
-            # Invariant 6 the request still gets its result before the crash propagates
+            # write the tool_result first so the request is not left without one
             self.trace.tool_result(alert_id, name, ok=False, error=f"{type(e).__name__}: {e}")
             raise
 

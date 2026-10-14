@@ -46,7 +46,7 @@ def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
     args.output.mkdir(parents=True, exist_ok=True)
-    # Keep the config next to the outputs, so every run is reproducible from its directory.
+    # save a copy of the config next to the outputs
     saved_config = args.output / "config.toml"
     if args.config.resolve() != saved_config.resolve():
         shutil.copyfile(args.config, saved_config)
@@ -59,7 +59,7 @@ def main() -> None:
         model = cfg["model"]
         client = ModelClient(model["provider"], model["name"], cfg["budget"]["output_allowance"],
                              model.get("reasoning_effort"))
-        # The agent exists before discovery, so every alert found can still be settled on a crash.
+        # create the agent before Bandit runs, so a later crash can still settle every alert
         agent = Agent(cfg, Workspace(args.input), trace, client)
         alerts = agent.alerts = discover(args.input, cfg["scan"], trace)
         with agent.ws:
@@ -70,7 +70,7 @@ def main() -> None:
                                    node="crash")
         raise
     finally:
-        # Invariant 3 and B9: one terminal event, last, and a report.json, even after a crash
+        # always write the terminal event and report.json, also after a crash
         trace.terminal(status)
         report = build_report(
             str(args.input), target_commit(args.input), cfg["scan"], alerts,

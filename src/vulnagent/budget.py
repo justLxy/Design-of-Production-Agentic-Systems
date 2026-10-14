@@ -1,11 +1,8 @@
-"""The run's token budget.
+"""Token budget for the whole run.
 
-Charge: input + output exactly as the provider reported them, read from the
-trace's ledger (cache_read and cache_write are never charged).
-Check: before every model call, refuse the call unless the estimated input plus
-the full output allowance fits in what remains. The estimate is the provider's
-count for the conversation so far plus a conservative guess for what was
-appended since. A refused check is sticky.
+Used tokens are input + output as reported by the provider (cache tokens are
+not counted). Before each model call, check() tests whether the estimated
+input plus the output allowance still fits in the budget.
 """
 
 import json
@@ -14,7 +11,7 @@ from dataclasses import dataclass
 from vulnagent.trace import Trace
 
 CHARS_PER_TOKEN = 3
-MESSAGE_OVERHEAD = 50 # rough allowance for the provider's role and formatting tokens
+MESSAGE_OVERHEAD = 50  # rough guess for role and formatting tokens
 
 
 @dataclass(frozen=True)
@@ -47,9 +44,11 @@ class Budget:
 
     def check(self, items: list[dict], tools: list[dict],
               counted_tokens: int = 0, counted_items: int = 0) -> BudgetCheck:
-        """Check the budget before every model call.
+        """Return whether the next model call fits in the budget.
 
-        Call before every model call. Once a check fails, every later check fails.
+        counted_tokens is the last call's input + output, which already covers
+        items[:counted_items], so only the newer items are estimated. Once a
+        check fails, every later check fails too.
         """
         if counted_items:
             estimate = counted_tokens + estimate_input_tokens(items[counted_items:], [])

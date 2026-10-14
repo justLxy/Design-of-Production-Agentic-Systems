@@ -1,4 +1,4 @@
-"""Tests for the model client (B6) and the budget (B6, B7). No network calls."""
+"""Tests for the model client and the budget. No network calls."""
 
 from types import SimpleNamespace as NS
 
