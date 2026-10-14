@@ -155,7 +155,8 @@ before anything is written. Then it creates the output folder, copies the config
 as `config.toml`, opens `trace.jsonl`, creates the model client and the agent, runs Bandit,
 copies the target into a temp folder and goes through the alerts in report order.
 
-Exactly one `terminal` event is written, as the last line. Its status is one of these:
+Exactly one `terminal` event is written, as the last line. Its status is one of these five
+values and nothing else:
 
 | Status | Trigger | Rows that are not classified yet get |
 |---|---|---|
@@ -165,7 +166,9 @@ Exactly one `terminal` event is written, as the last line. Its status is one of 
 | `no_progress` | one alert had 3 turns in a row without new information | `error`, rationale says the run stopped |
 | `crashed` | an exception escaped, including a Bandit failure or Ctrl+C | `error`, rationale has the exception |
 
-The run stops at the first of these, so exactly one applies. A turn without new information
+The run stops at the first of these, so exactly one applies. Before each model call
+`max_steps` is checked before the budget, so if both would stop the run, the status is
+`max_steps`. A turn without new information
 is a model turn where every tool call was refused or repeated an earlier call for the same
 alert, or where the model only wrote text. A reply that is cut off, or an API call that
 still fails after the SDK's retries, only turns that alert into an `error` row, and the run
@@ -174,8 +177,8 @@ event and `report.json` are still written. `report.json` is written to a temp fi
 renamed, so it is never left half written.
 
 The budget charge is `input + output` exactly as the provider reports them in `usage`,
-summed over every `model_call`. `cache_read` and `cache_write` are recorded but not
-charged. The running sum is kept in one place, the trace's ledger, and both the budget
+summed over every `model_call`, and it is added right after each call returns.
+`cache_read` and `cache_write` are recorded but not charged. The running sum is kept in one place, the trace's ledger, and both the budget
 check and `used_tokens` in `report.json` read it from there. A failed API call has no
 usage, so nothing is charged and no `model_call` is written. The output allowance is sent
 on every call as `max_output_tokens`. For a reasoning model this limit includes the
@@ -189,8 +192,11 @@ provider's count for the previous call (input + output) and only estimate the to
 added since, with `len(json.dumps(new items)) / 3 + 50`. Dividing by 3 instead of the usual
 4 characters per token keeps the estimate on the high side. When the check fails, the
 runtime writes a `routing` event with `remaining` and `required`, and every alert without a
-row, including the current one, gets `budget_exhausted`. After one failed check no more
-model calls are made in that run. In the final `radicale-low` run the cutoff happened in
+row, including the current one, gets `budget_exhausted`, the terminal status is
+`budget_exhausted` and `budget.exhausted` in `report.json` is true. After one failed check
+no more model calls are made in that run. Because the input part is an estimate, a call
+could in theory go a little over `max_tokens`; this did not happen in my runs (for example
+53,393 of 60,000 in `radicale-low`). In the final `radicale-low` run the cutoff happened in
 the fourth alert, and the `routing` event shows `remaining = 6607` and
 `required = 8706`.
 
