@@ -266,48 +266,42 @@ block swapped in, and each run folder also has the `config.toml` it used. The se
 | owasp-low | budget_exhausted | 55,338 | 0 | 6 | 12 |
 ### OWASP precision and recall
 
-I scored the OWASP runs against `expectedresults-0.1.csv` (18
-alerts, 8 of them real vulnerabilities in the key). The final run `runs/owasp-full` got
-TP 6, FP 2, TN 8, FN 2, which is precision 0.75, recall 0.75 and accuracy 0.78. The two
-false positives were both BenchmarkTest00017 (B317 and B318). The model read the comment
-that SAX features are off by default, but still said 1 because the code does not reject
-DTDs, so entity expansion could still use up resources. The two false negatives were
-BenchmarkTest00054 and 00058 (B324), which I explain below.
+I scored the OWASP runs against `expectedresults-0.1.csv` (18 alerts, 8 of them real
+vulnerabilities in the key). The final run `runs/owasp-full` got TP 6, FP 2, TN 8, FN 2,
+which is precision 0.75, recall 0.75 and accuracy 0.78.
 
-I ran OWASP several times while tuning and read the rationale of every wrong row:
-
-| Run | Change | TP | FP | TN | FN | Precision | Recall |
+| Run | Prompt | TP | FP | TN | FN | Precision | Recall |
 |---|---|---|---|---|---|---|---|
-| owasp-full-prompt-v1 | first prompt, low | 8 | 3 | 7 | 0 | 0.73 | 1.00 |
-| owasp-full-prompt-v2 | two more prompt bullets, low | 7 | 3 | 7 | 1 | 0.70 | 0.88 |
-| owasp-full (final) | same as v2 | 6 | 2 | 8 | 2 | 0.75 | 0.75 |
+| owasp-full-prompt-v1 | v1 | 8 | 3 | 7 | 0 | 0.73 | 1.00 |
+| owasp-full-prompt-v2 | v2 | 7 | 3 | 7 | 1 | 0.70 | 0.88 |
+| owasp-full (final) | v2 | 6 | 2 | 8 | 2 | 0.75 | 0.75 |
 
-In v1 the false positives were BenchmarkTest00017 (B317 and B318) and BenchmarkTest00075
-(B102). For 00017 the model said the XML parser was open to XXE, but `xml.sax` in Python
-3.12 does not resolve external entities by default. For 00075 the code only runs `exec`
-on a value that starts and ends with `'` and has no `'` inside, which can only be a plain
-string literal, but the model called the check "superficial". I did not want to put these
-answers into the prompt, because that would only help on OWASP. So I added two general
-bullets instead (prompt v2): judge a function by how it behaves by default in Python 3.12,
-and work out whether any input that passes a validation check can still cause harm. v2
-fixed B318 for 00017 but not B317 or 00075, and it got two new mistakes (00058 and 00073)
-whose rationales had nothing to do with the new bullets. With 18 alerts and a model that
-does not give the same answer twice, one run is not enough to tell whether a prompt change
-helped. I kept v2 for the final runs because both bullets are true in general and also
-apply to Radicale and SGLang. The final run has exactly the same setup as v2. It also made
-4 mistakes, but only two of them (00017 B317 and 00058) are the same as in v2.
+### How I used the labels
 
-The B324 false negatives need some explanation. In BenchmarkTest00058 the model found that
-the value being hashed comes from a hard-coded config entry (`a_Value`) and that the cookie
-is stored under a different key, so user input never reaches SHA-1. In 00054 it found the
-same kind of thing for MD5: the hashed string only ever gets the constant `SomeOKString`. The answer key marks every
-MD5 or SHA-1 use in this category as a vulnerability no matter what is hashed. I did not
-change the prompt to match the key here, because on Radicale the model judged a SHA-1 alert
-the same way (SHA-1 only used to compare two event dicts, so label 0), and that is the
-answer I would want on a real project. I also noticed that the key labels the test case's
-category, not Bandit's rule. BenchmarkTest00013 to 00016 are XPath injection cases
-(`xpathi`, all false), but Bandit flags them for B314 (XML parsing), so the key and the
-alert are not always talking about the same problem.
+The key never goes into the agent's workspace; only I used it. Before writing the first
+prompt I read a few cases next to their labels, for example BenchmarkTest00011, which B608
+flags but which is safe because the query is parameterised. That is where the
+"parameterised query" example in the label 0 definition comes from. After each OWASP run I
+read the rationale of every row the key disagreed with, and only changed the prompt when
+the model had made a reasoning mistake that a general rule could fix:
+
+| Alert | Wrong in | What the model got wrong | What I did |
+|---|---|---|---|
+| 00017 B317, B318 | v1, v2 (B317), final | said the XML parser is open to XXE or entity expansion, but `xml.sax` in Python 3.12 does not resolve external entities by default | rule 1 in prompt v2 |
+| 00075 B102 | v1, v2 | called the quote check "superficial", but a value that starts and ends with `'` with no `'` inside can only be a string literal | rule 2 in prompt v2 |
+| 00073 B307 | v2 | judged an XSS problem instead of the code execution risk of `eval` | nothing, it happened once |
+| 00054, 00058 B324 | v2 (00058), final | nothing wrong in the data flow: the hashed value is a constant, but the key counts every MD5 or SHA-1 use | nothing, on purpose |
+
+Rule 1 says to judge a function by how it behaves by default in Python 3.12, and rule 2
+says to check whether any input that passes a validation step can still cause harm. I
+wrote general rules instead of the answers for 00017 and 00075 so that they also apply to
+Radicale and SGLang. The effect was hard to see: v2 and the final run have the same setup
+and both made 4 mistakes, but only two of them are the same, so with 18 alerts one run
+cannot show whether the change helped. I changed nothing for B324, because treating a hash
+of a constant as safe is what I want outside the benchmark, and the model judged
+Radicale's SHA-1 alert the same way. The key also labels cases by category, not by
+Bandit's rule (00013 to 00016 are `xpathi` cases that Bandit flags for B314), so the two do
+not always match.
 
 ### Trajectory of one alert
 
