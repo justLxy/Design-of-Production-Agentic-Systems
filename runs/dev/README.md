@@ -1,6 +1,7 @@
 # Development runs
 
-Runs I made while building and tuning the agent. REPORT.md cites them (A6 and C2).
+Runs I made while building and tuning the agent. REPORT.md cites the two OWASP runs in C2.
+The two Radicale runs are the ones I used to pick the token budgets.
 The files are unedited outputs of `vulnagent`.
 
 They were made before `cli.py` started saving `config.toml` next to the outputs, so the

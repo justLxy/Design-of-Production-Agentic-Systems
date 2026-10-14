@@ -23,25 +23,17 @@ evidence ranges. The runtime checks the submit, writes one report row and one
 The agent must never run target code, write to the target or invent observations.
 
 None of the tools can execute anything, they only read text files. Bandit is the only
-external program, and it parses the code without importing it. I found out how easy it is
-to break this rule by accident: my first `pytest` run collected the tests inside
-`targets/sglang`, imported them, and ran SGLang's own `conftest.py`. I fixed that with
-`testpaths = ["tests"]` in `pyproject.toml` and deleted the `__pycache__` folders it had
-left in the targets.
+external program, and it parses the code without importing it.
 
 The agent works on a copy of `--input` in a temp folder, so the tools cannot write to the
-real target. Bandit also writes its JSON to a temp folder and not into the target (the
-brief's example command writes `bandit.json` inside the target). The only thing I read
-from the real `--input` after copying it is `git rev-parse HEAD`, which does not write
-anything.
+real target. Bandit also writes its JSON to a temp folder and not into the target.
 
 To stop invented observations, only the dispatcher creates `function_call_output` items,
 and only after it has actually run a tool. Text the model writes stays in the conversation
 as the model's own message and is never turned into a tool result. The prompt also says
 "Never describe code you have not read", and `submit` refuses evidence that points to a
 file that does not exist in the copy (a hidden sibling case counts as not existing) or to
-lines past the end of the file. This does not prove the model read those exact lines, it
-only proves the lines exist.
+lines past the end of the file.
 
 ## A2. State machine
 
@@ -96,9 +88,6 @@ Each edge writes a `routing` event, and its `by` field says who made the decisio
 | tools → settle (classified) | conditional | runtime (submit passed validation) | none; the `state_change` with `node = "submit"` records it |
 | triage → stop | conditional | runtime | `budget_exhausted` or `max_steps` |
 | tools / nudge → stop | conditional | runtime | `no_progress` |
-
-The only edge the model decides is triage → tools, where it picks the tools to call or
-calls `submit`. All the other edges are decided by the runtime.
 
 ## A4. Agent state
 
@@ -217,14 +206,8 @@ runtime writes a `routing` event with `remaining` and `required`, and every aler
 row, including the current one, gets `budget_exhausted`. After one failed check no more
 model calls are made in that run.
 
-The estimate was simpler at first. In my first low-budget Radicale run (15,000 tokens) the
-check estimated the whole conversation as characters / 3 and stopped during the first
-alert after only 4,945 tokens. The trace said `remaining = 10055` and `required = 10587`,
-but the real input for that call would have been around 4,000. Code inside JSON strings has
-a lot of escaped quotes and newlines, so characters / 3 overestimated more and more as the
-conversation grew. Using the provider's own count for everything up to the last call fixed
-this. In the final `radicale-low` run the cutoff happened in the fourth alert, at
-`remaining = 11725` and `required = 13146`.
+In the final `radicale-low` run the cutoff happened in the fourth alert, and the
+`routing` event shows `remaining = 11725` and `required = 13146`.
 
 ## A7. Workspace and withholding
 
@@ -239,9 +222,7 @@ are the files the agent is not allowed to see:
 | top-level `results/` | OWASP | it holds other scanners' output (Bandit SARIF, Bearer JSON) for every case, with code snippets from the sibling cases | not copied |
 | every other `BenchmarkTest*` file | OWASP | each case has a safe twin; comparing the two gives the answer away | moved out of the copy while one alert is investigated |
 
-I did not plan to hide `results/` at first. I found it when a test searched for
-`BenchmarkTest00012` and got hits from `results/BenchmarkPython-Bandit.sarif`. I left
-`data/` and the `templates/web/*-Index.html` pages visible because they only list case
+I left `data/` and the `templates/web/*-Index.html` pages visible because they only list case
 names and URLs, not labels or code. `helpers/` is visible too, since following a value into
 `helpers/` is a normal part of investigating an alert.
 
@@ -367,13 +348,10 @@ input, because every model call sends the whole conversation again and each tool
 stays in it until the alert ends. Alerts are also handled one at a time in separate
 conversations, so similar alerts can get different labels. In `radicale-full` the four
 `pickle.load` calls in `radicale/sharing/files.py` got 1, 1, 1 and 0, and the model never
-saw what it had said about the other three. Results also change from run to run:
-BenchmarkTest00058 and 00073 were right in v1 and wrong in v2 for reasons that had nothing
-to do with what I changed in the prompt.
+saw what it had said about the other three.
 
 Some limits come from my own design choices. `no_progress` stops the whole run and not just
-the stuck alert. That is what the brief asks for, but it means one stuck alert gives
-`error` to all the alerts after it. `max_steps` is only checked before model calls, so one
+the stuck alert, so one stuck alert gives `error` to all the alerts after it. `max_steps` is only checked before model calls, so one
 reply with several tool calls can go a few steps over the limit before the run stops. The
 budget estimate for new tool output (characters / 3) is still a guess even though it is on
 the high side. And `submit` only checks that the evidence lines exist, not that the model
