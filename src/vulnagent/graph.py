@@ -37,6 +37,8 @@ class AlertState:
     items: list[dict]  # the conversation sent to the model; append-only
     seen_calls: set[str] = field(default_factory=set)  # tool requests already run
     stalled: int = 0  # consecutive turns without new information
+    counted_tokens: int = 0  # provider's count for items[:counted_items] (last input + output)
+    counted_items: int = 0
 
 class Agent:
     def __init__(self, cfg: dict, ws: Workspace, trace: Trace, client: ModelClient):
@@ -95,7 +97,7 @@ class Agent:
         if self.steps >= self.max_steps:
             self.trace.routing(aid, "max_steps", by="runtime", steps=self.steps)
             raise RunStopped(TerminalStatus.MAX_STEPS, f"max_steps={self.max_steps} reached")
-        check = self.budget.check(s.items, self.tools)
+        check = self.budget.check(s.items, self.tools, s.counted_tokens, s.counted_items)
         if not check.ok:
             self.trace.routing(aid, "budget_exhausted", by="runtime",
                                remaining=check.remaining, required=check.required)
@@ -105,13 +107,14 @@ class Agent:
         try:
             reply = self.client.complete(s.items, self.tools)
         except openai.APIError as e:
-            # No usage was reported, so nothing is charged; this alert fails, the run goes on.
             self.trace.routing(aid, "error", by="runtime", reason=f"model call failed: {type(e).__name__}")
             self._settle(s.alert, "triage", "error", None, f"The model call failed: {e}", [])
             return None
         self.trace.model_call(aid, ROLE, self.client.model, reply.usage,
                               finish_reason=reply.finish_reason)
         s.items += reply.output_items
+        s.counted_tokens = reply.usage["input"] + reply.usage["output"]
+        s.counted_items = len(s.items)
         return reply
 
     def _route(self, s: AlertState, reply: ModelReply) -> None:

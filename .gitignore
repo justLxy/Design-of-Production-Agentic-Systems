@@ -4,3 +4,5 @@ targets/
 *.egg-info/
 __pycache__/
 runs/test/
+.DS_Store
+out/

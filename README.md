@@ -1,19 +1,114 @@
-# hw1-agent-architectures
+# vulnagent
 
-COMS E6998-019 HW1: build an agent that scans a pinned Python repository with
-Bandit and labels each alert. The assignment is in
-[briefs/hw1.pdf](briefs/hw1.pdf) (source: `briefs/hw1.tex`).
+My HW1 agent for COMS E6998-019. It runs Bandit (MEDIUM severity and up) on a pinned
+Python repository and then uses `gpt-6-luna` to label every alert 1 (potential
+vulnerability) or 0 (not a vulnerability), with a rationale and line evidence. Each run
+writes `report.json` and `trace.jsonl`. The design and results are in
+[REPORT.md](REPORT.md).
 
-There is no starter code. You design and write every part of the agent.
+## Setup
 
-| File | What it is |
+You need Python 3.12 and git. On macOS I used Homebrew (`brew install python@3.12`). On
+Ubuntu 24.04 `sudo apt install python3.12 python3.12-venv` works. Then, from a fresh clone:
+
+```bash
+git clone https://github.com/justLxy/Design-of-Production-Agentic-Systems.git
+
+cd Design-of-Production-Agentic-Systems
+```
+
+
+```bash
+python3.12 -m venv .venv
+
+.venv/bin/pip install -r requirements.lock
+
+.venv/bin/pip install --no-deps -e .
+```
+
+`requirements.lock` pins all dependencies, including `bandit==1.9.4`.
+
+The agent reads one environment variable, `OPENAI_API_KEY`. You can export it in the shell,
+or put a line `OPENAI_API_KEY=...` in a file called `.env` at the repository root (the
+agent loads it with python-dotenv, and `.env` is in `.gitignore`). A key that is already
+exported in the shell wins over the one in `.env`.
+
+## Targets
+
+The agent takes the root of a target checkout as `--input`. I kept my checkouts in
+`targets/`, which is git-ignored. To get the same pinned commits:
+
+```bash
+git clone https://github.com/Kozea/Radicale targets/radicale
+
+git -C targets/radicale checkout eff8027f3dc4910be1659ee71f4b4a454ade5a8c
+
+git clone https://github.com/sgl-project/sglang targets/sglang
+
+git -C targets/sglang checkout bbe9c7eeb520b0a67e92d133dfc137a3688dc7f2
+
+git clone https://github.com/OWASP-Benchmark/BenchmarkPython targets/owasp-benchmark-python
+
+git -C targets/owasp-benchmark-python checkout f1291485808b66e20ddb6b01b10dc71b3df8c8ba
+```
+
+The agent never changes the checkout. It copies it to a temp folder first and only the copy
+is visible to the model, without `.git/`, the OWASP answer key and the other OWASP test
+cases (see A7 in the report).
+
+## Running
+
+The command has the form from the brief:
+
+```bash
+.venv/bin/vulnagent --input <target checkout root> --output <out dir> --config <config.toml>
+```
+
+For example, Radicale with the full budget and then with the low budget:
+
+```bash
+.venv/bin/vulnagent --input targets/radicale --output out/radicale-full --config configs/full.toml
+```
+
+```bash
+.venv/bin/vulnagent --input targets/radicale --output out/radicale-low --config configs/low.toml
+```
+
+The output folder gets `report.json`, `trace.jsonl` and a copy of the config as
+`config.toml`. When the run ends the agent prints one line with the terminal status and the
+label counts, for example
+`completed: 10 alerts: label 1 = 6, label 0 = 4, null = 0; used 217408 of 800000 tokens`.
+If the run crashes, the command exits with an error, but `report.json` and `trace.jsonl`
+are still written and the trace ends with a `crashed` terminal event. I suggest writing to
+`out/` (git-ignored) so the committed runs in `runs/` are not overwritten.
+
+In my final runs a full run took about 110 s and 217k tokens on Radicale, 248 s and 388k
+tokens on SGLang, and 137 s and 95k tokens on OWASP.
+
+## Configs
+
+There are two configs, and both validate against `config.schema.json`:
+
+| File | max_tokens | What it is for |
+|---|---|---|
+| `configs/full.toml` | 800,000 | enough for a complete run on all three targets (SGLang, the biggest, used 388k) |
+| `configs/low.toml` | 60,000 | runs out partway through Radicale; in my run 3 alerts were classified and the other 7 got `budget_exhausted` |
+
+Everything else is the same in both: `provider = "openai"`, `name = "gpt-6-luna"`,
+`reasoning_effort = "low"`, `output_allowance =
+4000` and `max_steps = 500`. Both have the Radicale `[scan]` block. To run another target,
+replace the `[scan]` block with that target's block from `briefs/scan/` and keep the rest.
+
+The six configs I used for my own runs, with the block already swapped, are in
+`configs/runs/<target>-<budget>.toml` (target is `radicale`, `sglang` or `owasp`).
+
+## What is in the repository
+
+| Path | Contents |
 |---|---|
-| `briefs/hw1.pdf` | The assignment brief |
-| `briefs/scan/*.toml` | The required `[scan]` block for each target |
-| `briefs/report.example.json` | An example `report.json`: 3 of the 18 OWASP rows, showing the format (rationales are placeholders) |
-| `config.schema.json` | JSON Schema the config your agent reads (`--config`, TOML) must validate against |
-| `report.schema.json` | JSON Schema your `report.json` must validate against |
-| `trace.schema.json` | JSON Schema each line of your `trace.jsonl` must validate against |
-| `briefs/trace.example.jsonl` | The example trajectory behind `briefs/report.example.json` |
-
-Clone targets into `targets/` (git-ignored). Your own `README.md` must tell us how to run your agent end to end, with `configs/full.toml` and `configs/low.toml` (brief, Section 10).
+| `src/vulnagent/` | the agent: CLI, Bandit wrapper, workspace, tools, dispatcher, model client, budget, graph, tracer, report |
+| `configs/` | `full.toml`, `low.toml`, and the six configs in `configs/runs/` |
+| `runs/<target>-<budget>/` | the six final runs cited in the report, unedited, each with its `config.toml` |
+| `runs/dev/` | earlier runs from development that the report also cites; their settings are in `runs/dev/README.md` |
+| `REPORT.md` | design report (Part A), results (C2), limitations and alternatives (C3), contribution statement |
+| `requirements.lock` | pinned dependencies |

@@ -13,6 +13,13 @@ or the primitive is not used for security.
 How to work:
 - Investigate with read_file, search and list_dir. Read the flagged code, then follow \
 the data it uses back to where it comes from.
+- Judge the flagged primitive by how it actually behaves in the Python version in \
+use (3.12) and with the library's defaults, unless the code changes them. A \
+primitive that is only dangerous when a feature is enabled is safe when the code \
+leaves it disabled.
+- If the data passes a validation or sanitisation check before the flagged code, \
+work out concretely whether any input that passes the check can still cause harm. \
+A check that leaves no harmful input is real protection, not a superficial one.
 - Base every claim on lines you have read with a tool in this conversation. Never \
 describe code you have not read.
 - When you are confident, call submit with the label, a rationale of one to three \

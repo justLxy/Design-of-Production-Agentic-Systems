@@ -3,7 +3,9 @@
 Charge: input + output exactly as the provider reported them, read from the
 trace's ledger (cache_read and cache_write are never charged).
 Check: before every model call, refuse the call unless the estimated input plus
-the full output allowance fits in what remains.
+the full output allowance fits in what remains. The estimate is the provider's
+count for the conversation so far plus a conservative guess for what was
+appended since. A refused check is sticky.
 """
 
 import json
@@ -43,9 +45,17 @@ class Budget:
     def remaining(self) -> int:
         return max(0, self.max_tokens - self.used)
 
-    def check(self, messages: list[dict], tools: list[dict]) -> BudgetCheck:
-        """Call before every model call. Once a check fails, every later check fails."""
-        required = estimate_input_tokens(messages, tools) + self.output_allowance
+    def check(self, items: list[dict], tools: list[dict],
+              counted_tokens: int = 0, counted_items: int = 0) -> BudgetCheck:
+        """Check the budget before every model call.
+
+        Call before every model call. Once a check fails, every later check fails.
+        """
+        if counted_items:
+            estimate = counted_tokens + estimate_input_tokens(items[counted_items:], [])
+        else:
+            estimate = estimate_input_tokens(items, tools)
+        required = estimate + self.output_allowance
         if self.exhausted or required > self.remaining:
             self.exhausted = True
             return BudgetCheck(False, self.remaining, required)

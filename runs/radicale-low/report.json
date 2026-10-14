@@ -1,0 +1,176 @@
+{
+  "target": {
+    "input": "targets/radicale",
+    "commit": "eff8027f3dc4910be1659ee71f4b4a454ade5a8c"
+  },
+  "scan": {
+    "bandit_version": "1.9.4",
+    "min_severity": "MEDIUM",
+    "alert_count": 10
+  },
+  "budget": {
+    "max_tokens": 60000,
+    "used_tokens": 48275,
+    "exhausted": true
+  },
+  "alerts": [
+    {
+      "alert_id": "radicale-auth-oauth2-py-60-B113",
+      "test_id": "B113",
+      "path": "radicale/auth/oauth2.py",
+      "line": 60,
+      "severity": "MEDIUM",
+      "confidence": "LOW",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The OAuth token endpoint is supplied through configuration (line 36), and each login sends a blocking requests.post to it without a timeout (lines 60\u201362). A stalled or unresponsive endpoint can therefore hold authentication processing indefinitely, making the missing timeout a potential availability vulnerability.",
+      "evidence": [
+        {
+          "path": "radicale/auth/oauth2.py",
+          "start_line": 33,
+          "end_line": 42
+        },
+        {
+          "path": "radicale/auth/oauth2.py",
+          "start_line": 48,
+          "end_line": 62
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-hook-email-init-py-227-B324",
+      "test_id": "B324",
+      "path": "radicale/hook/email/__init__.py",
+      "line": 227,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "SHA-1 is used only to compare hashes of event-detail dictionaries and decide whether to send update notifications, not for authentication, integrity, or another security decision. The comparison at lines 222\u2013250 does not rely on collision resistance as a security boundary.",
+      "evidence": [
+        {
+          "path": "radicale/hook/email/__init__.py",
+          "start_line": 222,
+          "end_line": 250
+        },
+        {
+          "path": "radicale/hook/email/__init__.py",
+          "start_line": 1092,
+          "end_line": 1101
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-131-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 131,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The sharing database file is deserialized directly with pickle at line 131, which can execute attacker-controlled reductions before the version check at line 133. The files are normally written by the application, but an attacker able to place or alter a file in the configured sharing database can trigger the load through sharing lookups; there is no validation before unpickling.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 95,
+          "end_line": 101
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 127,
+          "end_line": 139
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 257,
+          "end_line": 281
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-208-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 208,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-316-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 316,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-374-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 374,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-cache-py-109-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/cache.py",
+      "line": 109,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-history-py-53-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/history.py",
+      "line": 53,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-lock-py-102-B602",
+      "test_id": "B602",
+      "path": "radicale/storage/multifilesystem/lock.py",
+      "line": 102,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-sync-py-79-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/sync.py",
+      "line": 79,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
+    }
+  ]
+}

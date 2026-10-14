@@ -112,3 +112,12 @@ def test_a_refused_check_is_sticky(tmp_path):
 def test_a_zero_budget_refuses_the_first_call(tmp_path):
     budget = Budget(max_tokens=0, output_allowance=1, trace=Trace(tmp_path / "trace.jsonl", "t"))
     assert not budget.check([], []).ok
+
+def test_check_uses_the_providers_count_for_the_conversation_so_far(tmp_path):
+    budget = Budget(max_tokens=10_000, output_allowance=100, trace=Trace(tmp_path / "trace.jsonl", "t"))
+    earlier = [{"role": "user", "content": "x" * 30_000}]  # about 10_000 tokens by the estimate
+    new = [{"type": "function_call_output", "call_id": "c1", "output": "y" * 300}]
+    assert not budget.check(earlier + new, []).ok  # estimating everything does not fit...
+    budget.exhausted = False
+    check = budget.check(earlier + new, [], counted_tokens=2_000, counted_items=1)
+    assert check.ok and check.required < 2_500  # ...the provider counted 2_000 for the first item

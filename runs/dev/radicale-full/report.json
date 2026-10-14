@@ -1,0 +1,298 @@
+{
+  "target": {
+    "input": "targets/radicale",
+    "commit": "eff8027f3dc4910be1659ee71f4b4a454ade5a8c"
+  },
+  "scan": {
+    "bandit_version": "1.9.4",
+    "min_severity": "MEDIUM",
+    "alert_count": 10
+  },
+  "budget": {
+    "max_tokens": 500000,
+    "used_tokens": 194172,
+    "exhausted": false
+  },
+  "alerts": [
+    {
+      "alert_id": "radicale-auth-oauth2-py-60-B113",
+      "test_id": "B113",
+      "path": "radicale/auth/oauth2.py",
+      "line": 60,
+      "severity": "MEDIUM",
+      "confidence": "LOW",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The configured token endpoint is used in a synchronous requests.post without a timeout, so an unreachable or nonresponsive endpoint can hold an authentication request indefinitely and tie up server resources. The endpoint comes from configuration (lines 36\u201341), but the missing timeout is independently an availability risk.",
+      "evidence": [
+        {
+          "path": "radicale/auth/oauth2.py",
+          "start_line": 33,
+          "end_line": 42
+        },
+        {
+          "path": "radicale/auth/oauth2.py",
+          "start_line": 44,
+          "end_line": 71
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-hook-email-init-py-227-B324",
+      "test_id": "B324",
+      "path": "radicale/hook/email/__init__.py",
+      "line": 227,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "SHA-1 is used only as a local comparison fingerprint for two event-detail dictionaries; the code compares the resulting digests and does not use them for authentication, integrity, or adversarial collision resistance (lines 222\u2013250). Although event fields may be parsed from ICS contents, the hash's purpose is solely to decide whether to send update notifications (lines 1092\u20131098), so Bandit's weak-hash warning is not a vulnerability.",
+      "evidence": [
+        {
+          "path": "radicale/hook/email/__init__.py",
+          "start_line": 216,
+          "end_line": 250
+        },
+        {
+          "path": "radicale/hook/email/__init__.py",
+          "start_line": 1092,
+          "end_line": 1098
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-131-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 131,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The flagged load deserializes a pickle directly from the sharing database file, and the file-backed implementation also loads entries while enumerating that directory (lines 199\u2013208); pickle can execute attacker-controlled payloads during deserialization. Files are ordinarily created by this implementation via pickle.dump (lines 257\u2013281), but the database path may be configured externally and no integrity or trusted-file validation is applied before loading, so anyone able to place/replace a database file can trigger code execution through these reads.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 35,
+          "end_line": 75
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 127,
+          "end_line": 133
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 199,
+          "end_line": 208
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 257,
+          "end_line": 281
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-208-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 208,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The list operation deserializes every regular file in the configured sharing database directory with unrestricted `pickle.load` (lines 199\u2013208), and the same files are populated with pickle by this backend (lines 250\u2013281). If an attacker can write or replace a database file\u2014for example through compromised or overly permissive filesystem access\u2014the load can execute attacker-controlled pickle payloads; the configured database path does not establish that its contents are trusted.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 199,
+          "end_line": 208
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 250,
+          "end_line": 281
+        },
+        {
+          "path": "radicale/config.py",
+          "start_line": 582,
+          "end_line": 591
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-316-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 316,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The flagged load reads a server-side sharing database file from the configured database directory; the corresponding create/update paths populate that store with `pickle.dump` of server-constructed `(version, row)` values (lines 257\u2013281 and 348\u2013351). The code shown provides no path for request data to supply raw pickle bytes, so this is trusted application-managed state rather than deserialization of attacker-controlled input.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 127,
+          "end_line": 136
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 250,
+          "end_line": 281
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 307,
+          "end_line": 316
+        },
+        {
+          "path": "radicale/config.py",
+          "start_line": 582,
+          "end_line": 591
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-374-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 374,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The sharing database file is deserialized directly with pickle at line 374, which can execute attacker-controlled pickle payloads. These files are created from application rows (lines 257\u2013281), but the configured database path and its files are not restricted here to trusted-only access; a party able to place or alter a sharing record can trigger the load through normal sharing operations (also shown at lines 127\u2013131 and 365\u2013374).",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 365,
+          "end_line": 380
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 257,
+          "end_line": 281
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 127,
+          "end_line": 131
+        },
+        {
+          "path": "radicale/config.py",
+          "start_line": 582,
+          "end_line": 591
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-cache-py-109-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/cache.py",
+      "line": 109,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The pickle is an internally generated item-cache file: the only shown writer serializes cache content derived from the item being stored, while readers obtain the cache from the collection\u2019s configured cache folder and verify its hash against the filesystem item. No untrusted upload data is written as pickle opcodes, so this is not an exploitable untrusted-deserialization path under the repository\u2019s cache flow.",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/cache.py",
+          "start_line": 84,
+          "end_line": 113
+        },
+        {
+          "path": "radicale/storage/multifilesystem/get.py",
+          "start_line": 99,
+          "end_line": 120
+        },
+        {
+          "path": "radicale/storage/multifilesystem/base.py",
+          "start_line": 116,
+          "end_line": 129
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-history-py-53-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/history.py",
+      "line": 53,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The deserialized file is a per-collection history cache under Radicale\u2019s configured collection/cache directories, not data supplied through the request path; history entries are also written by this code as serialized etag pairs. The evidence supports treating this as a local cache file rather than attacker-controlled input for this alert (history.py:50-72; base.py:113-129).",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/history.py",
+          "start_line": 50,
+          "end_line": 72
+        },
+        {
+          "path": "radicale/storage/multifilesystem/base.py",
+          "start_line": 113,
+          "end_line": 129
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-lock-py-102-B602",
+      "test_id": "B602",
+      "path": "radicale/storage/multifilesystem/lock.py",
+      "line": 102,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The storage hook is an administrator-configured command, but it is interpolated into a shell command alongside request-derived path/request/user values and passed to Popen with shell=True. Shell quoting of the placeholder values mitigates those substitutions, but the configured hook itself is intentionally arbitrary shell input; this alert represents execution of configured commands and the request values are quoted, so assess as not vulnerability? Potential concern hook is trusted configuration. Mark 0: command is administrator supplied, dynamic values quoted.",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/lock.py",
+          "start_line": 80,
+          "end_line": 103
+        },
+        {
+          "path": "radicale/config.py",
+          "start_line": 566,
+          "end_line": 569
+        }
+      ]
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-sync-py-79-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/sync.py",
+      "line": 79,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The pickle file is an internal sync-token cache, and its filename is selected only after the client-supplied token is restricted to a 64-character lowercase hexadecimal hash (sync.py:47\u201354); cache storage is under the configured collection/cache roots (base.py:113\u2013129). The state is serialized from the collection's computed `state` mapping (sync.py:55\u201365, 93\u2013100), so this is not deserialization of attacker-controlled content absent an attacker already having write access to the server's storage/cache.",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/sync.py",
+          "start_line": 47,
+          "end_line": 54
+        },
+        {
+          "path": "radicale/storage/multifilesystem/sync.py",
+          "start_line": 55,
+          "end_line": 65
+        },
+        {
+          "path": "radicale/storage/multifilesystem/sync.py",
+          "start_line": 70,
+          "end_line": 100
+        },
+        {
+          "path": "radicale/storage/multifilesystem/base.py",
+          "start_line": 113,
+          "end_line": 129
+        }
+      ]
+    }
+  ]
+}
