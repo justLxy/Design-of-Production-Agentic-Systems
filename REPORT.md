@@ -22,7 +22,7 @@ evidence ranges. The runtime checks the submit, writes one report row and one
 The agent must never run target code, write to the target or invent observations. The
 model's tools can only read text files inside a temporary copy of `--input` (A5, A7), and
 Bandit parses the code without importing it and writes its JSON to a temp folder. Every
-tool result, including refusals, is created by the dispatcher and never by the model, the
+tool result, including refusals, is created by the dispatcher and never by the model. The
 prompt tells the model not to describe code it has not read, and `submit` refuses evidence
 that does not exist in the copy.
 
@@ -194,9 +194,7 @@ added since, with `len(json.dumps(new items)) / 3 + 50`. Dividing by 3 instead o
 runtime writes a `routing` event with `remaining` and `required`, and every alert without a
 row, including the current one, gets `budget_exhausted`, the terminal status is
 `budget_exhausted` and `budget.exhausted` in `report.json` is true. After one failed check
-no more model calls are made in that run. Because the input part is an estimate, a call
-could in theory go a little over `max_tokens`; this did not happen in my runs (for example
-53,393 of 60,000 in `radicale-low`). In the final `radicale-low` run the cutoff happened in
+no more model calls are made in that run. In the final `radicale-low` run the cutoff happened in
 the fourth alert, and the `routing` event shows `remaining = 6607` and
 `required = 8706`.
 
