@@ -19,18 +19,12 @@ calls `submit` with a label (1 or 0), a short rationale that cites line numbers,
 evidence ranges. The runtime checks the submit, writes one report row and one
 `state_change` for the alert, puts the hidden files back and moves on to the next alert.
 
-The agent must never run target code, write to the target or invent observations. None of
-the tools can execute anything, they only read text files, and Bandit, the only external
-program, parses the code without importing it. The tools also cannot write to the real
-target, because the agent works on a copy of `--input` in a temp folder, and Bandit writes
-its JSON to a temp folder too.
-
-To stop invented observations, only the dispatcher creates `function_call_output` items,
-and only after it has actually run a tool. Text the model writes stays in the conversation
-as the model's own message and is never turned into a tool result. The prompt also says
-"Never describe code you have not read", and `submit` refuses evidence that points to a
-file that does not exist in the copy (a hidden sibling case counts as not existing) or to
-lines past the end of the file.
+The agent must never run target code, write to the target or invent observations. The
+model's tools can only read text files inside a temporary copy of `--input` (A5, A7), and
+Bandit parses the code without importing it and writes its JSON to a temp folder. Every
+tool result, including refusals, is created by the dispatcher and never by the model, the
+prompt tells the model not to describe code it has not read, and `submit` refuses evidence
+that does not exist in the copy.
 
 ## A2. State machine
 
@@ -74,11 +68,9 @@ The graph has five nodes:
 | nudge | Appends a user message asking the model to call a tool or submit |
 | settle | Writes the alert's one `state_change` and its report row |
 
-These are all the edges in the diagram. Most of them write a `routing` event whose `by`
-field says who made the decision. Three kinds do not, because another event already
-records them: the edges into crashed (the `crashed` terminal event, plus a failed Bandit
-`tool_result` when Bandit is the cause), tools → settle (the `state_change` with
-`node = "submit"`) and settle → completed (the `completed` terminal event).
+Normal transitions write a `routing` event whose `by` field says who decided. An accepted
+submit and the end of the run are recorded by their `state_change` and `terminal` events
+instead.
 
 | From → to | Conditional or fixed | Decided by | `routing.decision` |
 |---|---|---|---|
@@ -112,16 +104,13 @@ records them: the edges into crashed (the `crashed` terminal event, plus a faile
 | hidden sibling files | alert | `Workspace.investigating` | moved out at start, moved back at end | no |
 
 `counted_tokens` is the last call's input + output as the provider reported it, and
-`counted_items` is how long `items` was at that point. The budget check uses them (see A6).
-I made the conversation append only because the trace has to match what the model
-actually saw. If the runtime changed old messages, the two would not line up anymore.
-Every alert gets a new `AlertState`, so nothing from one alert's conversation is carried
-into the next one.
+`counted_items` is how long `items` was at that point; the budget check uses them (A6).
+Each alert gets its own append-only conversation in a new `AlertState`, so the
+conversation is not carried into the next alert.
 
 ## A5. Tools
 
-All model tools go through the dispatcher. It parses the
-arguments as JSON, checks that the tool exists, validates the arguments against the tool's
+All model tools go through the dispatcher. It parses the arguments as JSON, checks that the tool exists, validates the arguments against the tool's
 JSON Schema (the same schema I send to the model), runs the tool, and writes the
 `tool_request` / `tool_result` pair. Any problem goes back to the model as an observation
 starting with `REFUSED:` instead of crashing the run. If a tool raises something I did not
@@ -132,7 +121,7 @@ following symlinks. Bandit is not a model tool: the runtime runs it once in `dis
 and records it as a `tool_request` / `tool_result` pair with `alert_id: null`.
 
 `read_file(path, start_line=1, end_line=None)` returns the requested lines with line
-numbers and a header such as `radicale/auth/oauth2.py, lines 1-180 of 180`. It returns at
+numbers and a header such as `radicale/auth/oauth2.py, lines 1-71 of 71`. It returns at
 most 200 lines per call and cuts each line at 300 characters. If the range is longer, it
 returns the first 200 lines and tells the model which line to continue from. It refuses a
 path outside the copy, a missing file (hidden sibling cases count as missing), a file that
@@ -176,22 +165,13 @@ Exactly one `terminal` event is written, as the last line. Its status is one of 
 | `no_progress` | one alert had 3 turns in a row without new information | `error`, rationale says the run stopped |
 | `crashed` | an exception escaped, including a Bandit failure or Ctrl+C | `error`, rationale has the exception |
 
-Only one of them can happen because the run stops at the first one. The budget,
-`max_steps` and `no_progress` each raise `RunStopped` with their own status and `run()`
-returns it. `crashed` is the starting value of `status` in `cli.main` and only gets
-replaced when `run()` returns. By "a turn without new information" I mean a model turn
-where every tool call was refused or was an exact repeat of an earlier call for the same
-alert (I compare the tool name plus the arguments with sorted keys), or where the model
-only wrote text. When a reply is cut off, or an API call still fails after the SDK's own
-retries, only that alert becomes an `error` row and the run goes on with the next one.
-
-For crashes, `cli.main` uses `try / except / finally`. The `except` block gives an `error`
-row (with its `state_change`) to every alert that does not have a row yet, and the
-`finally` block writes the terminal event and `report.json`. I create the agent object
-before running Bandit, so if copying the workspace fails, every alert Bandit found still
-gets a row. `report.json` is first written to a `.tmp` file and then renamed, so a crash in
-the middle of writing cannot leave half a file. My tests cover both a crash on the third
-model call and a failed Bandit run.
+The run stops at the first of these, so exactly one applies. A turn without new information
+is a model turn where every tool call was refused or repeated an earlier call for the same
+alert, or where the model only wrote text. A reply that is cut off, or an API call that
+still fails after the SDK's retries, only turns that alert into an `error` row, and the run
+goes on. After a crash, every alert without a row gets an `error` row, and the terminal
+event and `report.json` are still written. `report.json` is written to a temp file and then
+renamed, so it is never left half written.
 
 The budget charge is `input + output` exactly as the provider reports them in `usage`,
 summed over every `model_call`. `cache_read` and `cache_write` are recorded but not
@@ -235,25 +215,21 @@ For the per-alert hiding, `Workspace.investigating(alert_path)` takes the stem o
 alert's file (for example `BenchmarkTest00011`) and moves every `BenchmarkTest*` file with a
 different stem into a `withheld/` folder next to the copy. The case keeps its own `.py` and
 `.html`. On OWASP this moves 2,458 of the 2,460 files. The `withheld/` folder is outside the
-copy's root, so `resolve` refuses any path into it. Radicale and SGLang have no
-`BenchmarkTest*` files, so nothing is moved there and the same code works on all three
-targets.
+copy's root, so `resolve` refuses any path into it.
 
 The per-alert move is undone in a `finally` block when the alert is settled, even if it
 ended with an exception, so the next alert can see its own file. The run-level hiding does
 not need to be undone, because the original `--input` is never changed and the copy is
 deleted at the end.
 
-My tests check that `.git`, the answer key and `results/` are not in the copy, that `..`, absolute paths and a symlink to `/etc` are
-refused, that only the case's two files are visible during an alert, that `search` cannot
-find code that only exists in the sibling file, and that the files come back after the
-alert, also after a simulated crash.
+My tests check each row of the table above, the path refusals (including a symlink to
+`/etc`), and that the moved files come back after a simulated crash.
 
 ## C2. Results
 
 The final runs use `configs/full.toml` and `configs/low.toml` with each target's `[scan]`
-block swapped in, and each run folder also has the `config.toml` it used. The settings are `gpt-6-luna`, prompt v2,
-`reasoning_effort = "low"`, `output_allowance = 4000`, `max_steps = 500`, and `max_tokens`
+block swapped in, and each run folder also has the `config.toml` it used. The settings are
+`gpt-6-luna`, prompt v2, `reasoning_effort = "low"`, `output_allowance = 4000`, `max_steps = 500`, and `max_tokens`
 800,000 for full and 60,000 for low.
 
 | Run | Terminal status | Tokens used | Label 1 | Label 0 | null |
@@ -264,11 +240,11 @@ block swapped in, and each run folder also has the `config.toml` it used. The se
 | sglang-low | budget_exhausted | 50,434 | 3 | 0 | 18 |
 | owasp-full | completed | 88,207 | 8 | 10 | 0 |
 | owasp-low | budget_exhausted | 55,338 | 0 | 6 | 12 |
+
 ### OWASP precision and recall
 
 I scored the OWASP runs against `expectedresults-0.1.csv` (18 alerts, 8 of them real
-vulnerabilities in the key). The final run `runs/owasp-full` got TP 6, FP 2, TN 8, FN 2,
-which is precision 0.75, recall 0.75 and accuracy 0.78.
+vulnerabilities in the key). The final run `runs/owasp-full` had an accuracy of 0.78.
 
 | Run | Prompt | TP | FP | TN | FN | Precision | Recall |
 |---|---|---|---|---|---|---|---|
@@ -285,12 +261,13 @@ flags but which is safe because the query is parameterised. That is where the
 read the rationale of every row the key disagreed with, and only changed the prompt when
 the model had made a reasoning mistake that a general rule could fix:
 
-| Alert | Wrong in | What the model got wrong | What I did |
+| Alert | Wrong in | Reason for disagreement with the key | What I did |
 |---|---|---|---|
-| 00017 B317, B318 | v1, v2 (B317), final | said the XML parser is open to XXE or entity expansion, but `xml.sax` in Python 3.12 does not resolve external entities by default | rule 1 in prompt v2 |
+| 00017 B317, B318 | v1 (both), v2 (B317), final (B317) | said attacker XML reaches an unhardened parser, so XXE is possible, but `xml.sax` in Python 3.12 does not resolve external entities by default | rule 1 in prompt v2 |
+| 00017 B318 | final | accepted that external entities are off by default, but said entity expansion could still use up resources | nothing, it happened once |
 | 00075 B102 | v1, v2 | called the quote check "superficial", but a value that starts and ends with `'` with no `'` inside can only be a string literal | rule 2 in prompt v2 |
 | 00073 B307 | v2 | judged an XSS problem instead of the code execution risk of `eval` | nothing, it happened once |
-| 00054, 00058 B324 | v2 (00058), final | nothing wrong in the data flow: the hashed value is a constant, but the key counts every MD5 or SHA-1 use | nothing, on purpose |
+| 00054, 00058 B324 | v2 (00058), final | the model found that the hashed value is a constant, but the key counts every MD5 or SHA-1 use | nothing, on purpose |
 
 Rule 1 says to judge a function by how it behaves by default in Python 3.12, and rule 2
 says to check whether any input that passes a validation step can still cause harm. I
@@ -347,8 +324,8 @@ conversations, so similar alerts can get different labels. In the development ru
 final run all four got 1.
 
 Some limits come from my own design choices. `no_progress` stops the whole run and not just
-the stuck alert, so one stuck alert gives `error` to all the alerts after it. `max_steps` is only checked before model calls, so one
-reply with several tool calls can go a few steps over the limit before the run stops. The
+the stuck alert, so one stuck alert gives `error` to all the alerts after it. `max_steps`
+is only checked before model calls, so one reply with several tool calls can go a few steps over the limit before the run stops. The
 budget estimate for new tool output (characters / 3) is still a guess even though it is on
 the high side. And `submit` only checks that the evidence lines exist, not that the model
 actually read them.
@@ -358,17 +335,16 @@ I compared my design with three other architectures:
 | | My design (one tool loop per alert) | Fixed workflow | Plan-and-execute | Supervisor / worker |
 |---|---|---|---|---|
 | How it works | the model picks the next tool after each result, until it submits | the runtime always reads a fixed window around the flagged line, then one model call gives the label | a planner call lists the files and searches to do, the runtime runs them, a final call gives the label | a supervisor hands alerts (or groups of alerts) to several workers that each run a loop like mine |
-| Cost | about 18k tokens per alert on Radicale, 3 to 6 calls, mostly re-sent input | one call per alert with a few thousand input tokens, much cheaper | about 2 or 3 calls per alert; tool results are not re-sent after every step | workers cost about the same as mine, plus supervisor calls |
-| Latency | sequential; 100 s for Radicale, 282 s for SGLang | lowest, and alerts can run in parallel easily | fewer model round trips; planned reads can run in parallel | lowest wall time, since workers run in parallel |
-| Coordination | none between alerts; the budget and step counter are simple counters | none | the plan has to match what the code really looks like; if the first reads show something new, it needs a replan step | the hardest: the token budget and step counter are shared, so each check needs a lock, and the trace needs one writer to keep `step` going up by 1 |
-| Failure behaviour | can loop or wander, which is why I need `max_steps` and `no_progress`; can follow data into other files | cannot loop, but cannot follow data into other files either, so cross-file alerts (the storage hook in `radicale/storage/multifilesystem/lock.py`, which depends on `config.py`) would often be wrong | a bad plan wastes reads, and the plan is made before the model has seen the code | one worker failing does not stop the others; grouping alerts from the same file to one worker would fix the inconsistent `pickle.load` labels |
+| Cost | about 18k tokens per alert on Radicale, 3 to 6 calls, mostly re-sent input | one model call per alert, so far fewer tokens than my loop | about 2 or 3 calls per alert; tool results are not re-sent after every step | workers cost about the same as mine, plus supervisor calls |
+| Latency | sequential; 100 s for Radicale, 282 s for SGLang | one model round trip per alert, and alerts can run in parallel | fewer model round trips; planned reads can run in parallel | workers can run in parallel, so wall time can go down |
+| Coordination | none between alerts; the budget and step counter are simple counters | none | the plan has to match what the code really looks like; if the first reads show something new, it needs a replan step | the most work: the token budget and step counter are shared, so each check needs a lock, and the trace needs one writer to keep `step` going up by 1 |
+| Failure behaviour | can loop or wander, which is why I need `max_steps` and `no_progress`; can follow data into other files | cannot loop, but cannot follow data into other files either, so it is likely to miss context for cross-file alerts such as the storage hook in `radicale/storage/multifilesystem/lock.py`, which depends on `config.py` | a bad plan wastes reads, and the plan is made before the model has seen the code | one worker failing does not stop the others; giving all alerts from one file to the same worker might make labels like the `pickle.load` ones more consistent |
 
-A fixed workflow would probably be good enough for OWASP, where each case is one short file
-(in the final `owasp-full` run the median alert took 2 model calls and about 2,900 tokens),
-and it would be much cheaper. It would do worse on Radicale and SGLang, where the answer
-often depends on another file. If I built a second version, I would take one idea from
-supervisor/worker and group alerts by file, so that one conversation sees all the related
-call sites.
+A fixed workflow might be enough for OWASP, where each case is one short file (in the
+final `owasp-full` run the median alert took 2 model calls and about 2,900 tokens), and it
+would use fewer tokens. It is likely to do worse on Radicale and SGLang, where the answer
+often depends on another file. In a second version I would try grouping alerts by file,
+as in supervisor/worker, so that one conversation sees all the related call sites.
 
 ## Contributions
 
