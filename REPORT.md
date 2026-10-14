@@ -20,13 +20,11 @@ calls `submit` with a label (1 or 0), a short rationale that cites line numbers,
 evidence ranges. The runtime checks the submit, writes one report row and one
 `state_change` for the alert, puts the hidden files back and moves on to the next alert.
 
-The agent must never run target code, write to the target or invent observations.
-
-None of the tools can execute anything, they only read text files. Bandit is the only
-external program, and it parses the code without importing it.
-
-The agent works on a copy of `--input` in a temp folder, so the tools cannot write to the
-real target. Bandit also writes its JSON to a temp folder and not into the target.
+The agent must never run target code, write to the target or invent observations. None of
+the tools can execute anything, they only read text files, and Bandit, the only external
+program, parses the code without importing it. The tools also cannot write to the real
+target, because the agent works on a copy of `--input` in a temp folder, and Bandit writes
+its JSON to a temp folder too.
 
 To stop invented observations, only the dispatcher creates `function_call_output` items,
 and only after it has actually run a tool. Text the model writes stays in the conversation
@@ -106,7 +104,6 @@ Each edge writes a `routing` event, and its `by` field says who made the decisio
 
 `counted_tokens` is the last call's input + output as the provider reported it, and
 `counted_items` is how long `items` was at that point. The budget check uses them (see A6).
-
 I made the conversation append only because the trace has to match what the model
 actually saw. If the runtime changed old messages, the two would not line up anymore.
 Every alert gets a new `AlertState`, so nothing from one alert's conversation is carried
@@ -122,7 +119,8 @@ starting with `REFUSED:` instead of crashing the run. If a tool raises something
 expect (a bug), the dispatcher still writes `tool_result` with `ok: false` before letting
 the error go up. Every path argument goes through `Workspace.resolve`, which refuses
 absolute paths, any path containing `..`, and any path that ends up outside the copy after
-following symlinks.
+following symlinks. Bandit is not a model tool: the runtime runs it once in `discover`
+and records it as a `tool_request` / `tool_result` pair with `alert_id: null`.
 
 `read_file(path, start_line=1, end_line=None)` returns the requested lines with line
 numbers and a header such as `radicale/auth/oauth2.py, lines 1-180 of 180`. It returns at
@@ -148,9 +146,6 @@ refuses anything that does not match the schema, an evidence file that does not 
 the copy, and a line range outside the file. A refused submit goes back to the model so it
 can try again. An accepted submit settles the alert as `classified`, and a leading `./` in
 evidence paths is removed before the row is written.
-
-Bandit is not a model tool. The runtime runs it once in `discover` and records it as a
-`tool_request` / `tool_result` pair with `alert_id: null`.
 
 ## A6. Start, stop and termination
 
@@ -204,10 +199,9 @@ added since, with `len(json.dumps(new items)) / 3 + 50`. Dividing by 3 instead o
 4 characters per token keeps the estimate on the high side. When the check fails, the
 runtime writes a `routing` event with `remaining` and `required`, and every alert without a
 row, including the current one, gets `budget_exhausted`. After one failed check no more
-model calls are made in that run.
-
-In the final `radicale-low` run the cutoff happened in the fourth alert, and the
-`routing` event shows `remaining = 11725` and `required = 13146`.
+model calls are made in that run. In the final `radicale-low` run the cutoff happened in
+the fourth alert, and the `routing` event shows `remaining = 11725` and
+`required = 13146`.
 
 ## A7. Workspace and withholding
 
