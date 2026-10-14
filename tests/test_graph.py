@@ -163,3 +163,27 @@ def test_repeating_the_same_request_is_no_progress(tmp_path):
     assert status is TerminalStatus.NO_PROGRESS
     assert {r["status"] for r in rows.values()} == {"error"}
     assert ("no_progress", "runtime") in decisions(events)
+
+def test_calls_after_an_accepted_submit_are_recorded_as_refused(tmp_path):
+    status, rows, events, _ = run(tmp_path, [
+        reply(submit(P11), tool("unknown_tool")),
+        reply(submit(P12)),
+    ])
+    assert status is TerminalStatus.COMPLETED
+    assert rows[A11["alert_id"]]["status"] == "classified"
+    request = [e for e in events if e["kind"] == "tool_request" and e["tool"] == "unknown_tool"]
+    assert len(request) == 1
+    result = events[request[0]["step"]]  # the line right after the request
+    assert result["kind"] == "tool_result" and result["ok"] is False
+    assert "already submitted" in result["error"]
+
+
+def test_a_nudge_goes_back_to_triage(tmp_path):
+    _, _, events, _ = run(tmp_path, [
+        reply(text="I think this is safe."),
+        reply(submit(P11)),
+        reply(submit(P12)),
+    ])
+    seq = decisions(events)
+    i = seq.index(("nudge", "runtime"))
+    assert seq[i + 1] == ("triage", "runtime")

@@ -10,7 +10,7 @@
   },
   "budget": {
     "max_tokens": 60000,
-    "used_tokens": 55878,
+    "used_tokens": 55338,
     "exhausted": true
   },
   "alerts": [
@@ -23,7 +23,7 @@
       "confidence": "LOW",
       "label": 0,
       "status": "classified",
-      "rationale": "The query text is a fixed SELECT with a `?` placeholder, and the value derived from the request cookie is supplied separately as the parameter to `cur.execute` (lines 39\u201350). SQLite therefore does not interpret cookie contents as SQL syntax; the f-string does not interpolate untrusted data.",
+      "rationale": "Although `bar` is assigned from a request cookie at lines 38\u201343, it is supplied as a bound parameter to `cur.execute` at line 50 rather than interpolated into the SQL. The f-string query at line 47 contains only fixed SQL text and a `?` placeholder, so user-controlled input cannot alter the query structure.",
       "evidence": [
         {
           "path": "testcode/BenchmarkTest00011.py",
@@ -41,11 +41,11 @@
       "confidence": "LOW",
       "label": 0,
       "status": "classified",
-      "rationale": "Although `bar` is derived from a request cookie at lines 39\u201344, the SQL statement at line 48 contains only a fixed `?` placeholder, and line 51 passes `bar` separately as a bound parameter to SQLite. Thus cookie content is not incorporated into SQL syntax, so this is not an exploitable SQL injection.",
+      "rationale": "The cookie influences only `bar` (lines 39\u201344), which is supplied separately as a parameter to `cur.execute`; the SQL text at line 48 contains a fixed `?` placeholder, so the input is not interpreted as SQL (lines 48\u201353).",
       "evidence": [
         {
           "path": "testcode/BenchmarkTest00012.py",
-          "start_line": 38,
+          "start_line": 39,
           "end_line": 44
         },
         {
@@ -64,17 +64,22 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "The XML parser reads a fixed repository resource path (`helpers.utils.RES_DIR` is `./helpers/resources`), not a request- or cookie-derived filename; the untrusted cookie is used later in an XPath expression, not as XML input to `ET.parse`. Thus the flagged XML entity-processing sink receives the trusted static employees.xml document rather than attacker-controlled XML.",
+      "rationale": "The parser reads the fixed repository resource path (`helpers/resources/employees.xml`), whose contents are a simple static employee document with no DTD or entity declarations; the request cookie is used only afterward to build the XPath query. Thus attacker-controlled data does not reach `ET.parse` as XML input, so this B314 alert is not exploitable as written (lines 39\u201357; XML contents lines 1\u201327).",
       "evidence": [
         {
           "path": "testcode/BenchmarkTest00013.py",
-          "start_line": 38,
+          "start_line": 39,
           "end_line": 57
         },
         {
           "path": "helpers/utils.py",
           "start_line": 1,
-          "end_line": 3
+          "end_line": 4
+        },
+        {
+          "path": "helpers/resources/employees.xml",
+          "start_line": 1,
+          "end_line": 27
         }
       ]
     },
@@ -87,17 +92,12 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "The XML passed to `ET.parse` is loaded from the fixed repository resource path, not from the request; the only request-derived value is decoded into `bar` and used later in the XPath query (lines 39\u201343, 56\u201358). The bundled `employees.xml` contains ordinary static employee records and no attacker-supplied XML payload (lines 1\u201327), so this alert does not indicate an exploitable XML parsing issue.",
+      "rationale": "The flagged parser reads the fixed repository resource `helpers/resources/employees.xml`, whose contents are ordinary employee records with no attacker-controlled XML (lines 1\u201327). The request cookie is used later in the XPath query, not as input to `ET.parse`, so untrusted data cannot reach the XML parser in this code (testcode/BenchmarkTest00014.py, lines 39\u201358).",
       "evidence": [
         {
           "path": "testcode/BenchmarkTest00014.py",
           "start_line": 39,
           "end_line": 58
-        },
-        {
-          "path": "helpers/utils.py",
-          "start_line": 1,
-          "end_line": 3
         },
         {
           "path": "helpers/resources/employees.xml",
@@ -115,12 +115,35 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "The parser reads a fixed resource path (`helpers.utils.RES_DIR/employees.xml`), not XML supplied by the request; the checked-in file contains only ordinary employee elements and no attacker-controlled declarations. The request cookie is used later to construct the XPath query, not as input to `ET.parse`, so this XML-entity alert is not exploitable through the request data shown.",
+      "rationale": "The parser reads the fixed repository resource path `./helpers/resources/employees.xml`, not request data; the cookie only influences the subsequent XPath query. `RES_DIR` is a constant (`helpers/utils.py:3`), so attacker-controlled XML cannot reach this `ET.parse` call as written.",
       "evidence": [
         {
           "path": "testcode/BenchmarkTest00015.py",
           "start_line": 38,
           "end_line": 58
+        },
+        {
+          "path": "helpers/utils.py",
+          "start_line": 1,
+          "end_line": 4
+        }
+      ]
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00016-py-58-B314",
+      "test_id": "B314",
+      "path": "testcode/BenchmarkTest00016.py",
+      "line": 58,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The flagged parser reads only the fixed `helpers/resources/employees.xml` path, with `RES_DIR` defined as a constant in `helpers/utils.py`; the XML resource contains ordinary static employee records and no attacker-controlled XML input. Thus the unsafe-parser concern is not exploitable through this code path.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00016.py",
+          "start_line": 47,
+          "end_line": 60
         },
         {
           "path": "helpers/utils.py",
@@ -135,40 +158,16 @@
       ]
     },
     {
-      "alert_id": "testcode-BenchmarkTest00016-py-58-B314",
-      "test_id": "B314",
-      "path": "testcode/BenchmarkTest00016.py",
-      "line": 58,
-      "severity": "MEDIUM",
-      "confidence": "HIGH",
-      "label": 0,
-      "status": "classified",
-      "rationale": "ET.parse reads the repository-selected employees.xml resource, not request data; the cookie affects only the XPath query after parsing. The flagged XML parser therefore does not process attacker-controlled XML in this flow.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00016.py",
-          "start_line": 38,
-          "end_line": 60
-        }
-      ]
-    },
-    {
       "alert_id": "testcode-BenchmarkTest00017-py-49-B317",
       "test_id": "B317",
       "path": "testcode/BenchmarkTest00017.py",
       "line": 49,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": 0,
-      "status": "classified",
-      "rationale": "The XML comes from a client-controlled cookie (lines 38\u201343), but this code uses Python\u2019s default SAX parser and does not enable external general or parameter entities; the nearby comment also records that features are left disabled (lines 49\u201352). Thus the flagged call does not expose the usual external-entity XXE behavior under Python 3.12 defaults.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00017.py",
-          "start_line": 38,
-          "end_line": 52
-        }
-      ]
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
     },
     {
       "alert_id": "testcode-BenchmarkTest00017-py-52-B318",
@@ -177,16 +176,10 @@
       "line": 52,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": 1,
-      "status": "classified",
-      "rationale": "The POST handler URL-decodes a client-supplied cookie and assigns it directly to `bar` (lines 38\u201343), then parses it with `minidom.parseString` (line 52) without defusedxml. The supplied SAX parser uses defaults, which disable some external-entity behavior, but parsing attacker-controlled XML with this primitive still leaves XML entity/resource-exhaustion risks; the comment at line 50 does not validate or sanitize the input.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00017.py",
-          "start_line": 38,
-          "end_line": 52
-        }
-      ]
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
     },
     {
       "alert_id": "testcode-BenchmarkTest00054-py-64-B324",
@@ -195,21 +188,10 @@
       "line": 64,
       "severity": "HIGH",
       "confidence": "HIGH",
-      "label": 0,
-      "status": "classified",
-      "rationale": "Although the endpoint reads a client-controlled cookie, that value is appended to `string26833`, while `bar` is assigned from the separate empty `copy` and then receives only the constant `SomeOKString`; the bytes hashed therefore do not depend on the cookie. MD5 is used on this fixed non-security input in this code path, so the alert does not identify an exploitable weak-hash use.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00054.py",
-          "start_line": 38,
-          "end_line": 47
-        },
-        {
-          "path": "testcode/BenchmarkTest00054.py",
-          "start_line": 52,
-          "end_line": 65
-        }
-      ]
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
     },
     {
       "alert_id": "testcode-BenchmarkTest00057-py-65-B324",
@@ -218,21 +200,10 @@
       "line": 65,
       "severity": "HIGH",
       "confidence": "HIGH",
-      "label": 1,
-      "status": "classified",
-      "rationale": "The POST handler obtains the cookie from the request and propagates it through `bar` into the bytes hashed at lines 39\u201355. It uses MD5 and writes the resulting digest to a password file at lines 65\u201370, so attacker-controlled cookie data is processed with a weak hash in a password-like storage context.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00057.py",
-          "start_line": 34,
-          "end_line": 55
-        },
-        {
-          "path": "testcode/BenchmarkTest00057.py",
-          "start_line": 59,
-          "end_line": 74
-        }
-      ]
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
     },
     {
       "alert_id": "testcode-BenchmarkTest00058-py-65-B324",
@@ -241,21 +212,10 @@
       "line": 65,
       "severity": "HIGH",
       "confidence": "HIGH",
-      "label": 0,
-      "status": "classified",
-      "rationale": "The cookie is inserted into a config value but the code hashes the separate hard-coded `keyA-69840` value (`a_Value`), so attacker-controlled input cannot influence the SHA-1 input. The digest is merely appended to a test file, and the hashed constant is not a secret or security credential in this code.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00058.py",
-          "start_line": 39,
-          "end_line": 48
-        },
-        {
-          "path": "testcode/BenchmarkTest00058.py",
-          "start_line": 53,
-          "end_line": 74
-        }
-      ]
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
     },
     {
       "alert_id": "testcode-BenchmarkTest00059-py-63-B324",
@@ -264,21 +224,10 @@
       "line": 63,
       "severity": "HIGH",
       "confidence": "HIGH",
-      "label": 1,
-      "status": "classified",
-      "rationale": "The cookie value is attacker-influenced (line 39) and is hashed directly with SHA-1 (lines 51\u201364); the resulting digest is persisted as a purported password hash (lines 66\u201368). SHA-1 is unsuitable for security-sensitive password/hash storage, and there is no salt or password-hashing KDF.",
-      "evidence": [
-        {
-          "path": "testcode/BenchmarkTest00059.py",
-          "start_line": 38,
-          "end_line": 40
-        },
-        {
-          "path": "testcode/BenchmarkTest00059.py",
-          "start_line": 51,
-          "end_line": 68
-        }
-      ]
+      "label": null,
+      "status": "budget_exhausted",
+      "rationale": "",
+      "evidence": []
     },
     {
       "alert_id": "testcode-BenchmarkTest00060-py-60-B324",

@@ -10,7 +10,7 @@
   },
   "budget": {
     "max_tokens": 60000,
-    "used_tokens": 54854,
+    "used_tokens": 50434,
     "exhausted": true
   },
   "alerts": [
@@ -23,7 +23,7 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`recv_object` takes bytes received from another process-group rank and passes them directly to `pickle.loads` (lines 513\u2013532); pickle deserialization can execute attacker-controlled code. This path is used to receive metadata in `recv_tensor_dict` (lines 671\u2013679), with no validation before deserialization, so a compromised or untrusted group member can exploit it.",
+      "rationale": "`recv_object` deserializes bytes received from another process-group rank directly with `pickle.loads` (lines 510\u2013532), and this is used to reconstruct metadata received by `recv_tensor_dict` (lines 675\u2013679). Pickle can execute attacker-controlled reduction code, so a malicious or compromised peer in the group can trigger code execution; the sender helper's normal use of `pickle.dumps` does not make the receiver safe against forged peer messages.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/group_coordinator.py",
@@ -34,6 +34,11 @@
           "path": "python/sglang/multimodal_gen/runtime/distributed/group_coordinator.py",
           "start_line": 658,
           "end_line": 679
+        },
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/group_coordinator.py",
+          "start_line": 473,
+          "end_line": 496
         }
       ]
     },
@@ -46,8 +51,13 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`recv_obj` passes bytes returned directly from the distributed store into `pickle.loads` without validation (utils.py:116\u2013119), and the same class exposes pickle-backed broadcast deserialization (utils.py:134\u2013138). Since these values originate from other ranks sharing the store, a rank able to write/compromise a sending rank can supply a malicious pickle and trigger code execution in a receiving process.",
+      "rationale": "`recv_obj` passes bytes retrieved from the shared TCPStore directly to `pickle.loads`, whose deserialization can execute attacker-controlled pickle instructions (lines 114\u2013120). The code does not authenticate or validate the stored value; any party able to write to that store can therefore target a receiving rank with a malicious payload.",
       "evidence": [
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
+          "start_line": 67,
+          "end_line": 82
+        },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
           "start_line": 95,
@@ -55,8 +65,8 @@
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
-          "start_line": 122,
-          "end_line": 138
+          "start_line": 183,
+          "end_line": 195
         }
       ]
     },
@@ -67,10 +77,26 @@
       "line": 136,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": null,
-      "status": "budget_exhausted",
-      "rationale": "",
-      "evidence": []
+      "label": 1,
+      "status": "classified",
+      "rationale": "`broadcast_obj` deserializes bytes read from the shared `TCPStore` with unrestricted `pickle.loads` (lines 135\u2013138), and the store is the metadata transport for a multi-process group (lines 67\u201376, 183\u2013188). A process or other party able to write to that store can supply a malicious pickle that executes during receipt; the code does not authenticate or validate the stored bytes.",
+      "evidence": [
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
+          "start_line": 67,
+          "end_line": 76
+        },
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
+          "start_line": 122,
+          "end_line": 138
+        },
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
+          "start_line": 183,
+          "end_line": 188
+        }
+      ]
     },
     {
       "alert_id": "python-sglang-multimodal-gen-runtime-loader-component-loaders-component-loader-py-270-B615",

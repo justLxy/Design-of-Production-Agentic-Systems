@@ -10,7 +10,7 @@
   },
   "budget": {
     "max_tokens": 60000,
-    "used_tokens": 48275,
+    "used_tokens": 53393,
     "exhausted": true
   },
   "alerts": [
@@ -23,7 +23,7 @@
       "confidence": "LOW",
       "label": 1,
       "status": "classified",
-      "rationale": "The OAuth token endpoint is supplied through configuration (line 36), and each login sends a blocking requests.post to it without a timeout (lines 60\u201362). A stalled or unresponsive endpoint can therefore hold authentication processing indefinitely, making the missing timeout a potential availability vulnerability.",
+      "rationale": "The OAuth token endpoint is configurable and receives each login attempt, but requests.post at lines 60\u201362 has no timeout, so a slow or nonresponsive endpoint can hold authentication processing indefinitely (or until lower-level network behavior terminates it). This is an availability risk from the missing timeout.",
       "evidence": [
         {
           "path": "radicale/auth/oauth2.py",
@@ -32,8 +32,8 @@
         },
         {
           "path": "radicale/auth/oauth2.py",
-          "start_line": 48,
-          "end_line": 62
+          "start_line": 44,
+          "end_line": 70
         }
       ]
     },
@@ -46,17 +46,12 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "SHA-1 is used only to compare hashes of event-detail dictionaries and decide whether to send update notifications, not for authentication, integrity, or another security decision. The comparison at lines 222\u2013250 does not rely on collision resistance as a security boundary.",
+      "rationale": "SHA-1 is used only as a deterministic fingerprint to compare two event-detail dictionaries, and the code compares hashes solely to detect whether fields changed (lines 222\u2013250). It is not used for authentication, integrity protection, or attacker-controlled lookup security, so collision resistance is not security-dependent here.",
       "evidence": [
         {
           "path": "radicale/hook/email/__init__.py",
-          "start_line": 222,
+          "start_line": 216,
           "end_line": 250
-        },
-        {
-          "path": "radicale/hook/email/__init__.py",
-          "start_line": 1092,
-          "end_line": 1101
         }
       ]
     },
@@ -69,22 +64,27 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The sharing database file is deserialized directly with pickle at line 131, which can execute attacker-controlled reductions before the version check at line 133. The files are normally written by the application, but an attacker able to place or alter a file in the configured sharing database can trigger the load through sharing lookups; there is no validation before unpickling.",
+      "rationale": "Sharing records are loaded directly with `pickle.load` in the get path (and also list/update/delete paths), with no validation before unpickling. Since the sharing database is a filesystem directory at a configurable path and its records are written there as pickle files, anyone able to tamper with that directory can cause code execution when a record is read; this is not safe against attacker-writable database files.",
       "evidence": [
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 95,
-          "end_line": 101
+          "start_line": 89,
+          "end_line": 131
         },
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 127,
-          "end_line": 139
+          "start_line": 194,
+          "end_line": 208
         },
         {
           "path": "radicale/sharing/files.py",
           "start_line": 257,
           "end_line": 281
+        },
+        {
+          "path": "radicale/config.py",
+          "start_line": 582,
+          "end_line": 591
         }
       ]
     },

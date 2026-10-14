@@ -10,7 +10,7 @@
   },
   "budget": {
     "max_tokens": 800000,
-    "used_tokens": 217408,
+    "used_tokens": 178288,
     "exhausted": false
   },
   "alerts": [
@@ -23,17 +23,17 @@
       "confidence": "LOW",
       "label": 1,
       "status": "classified",
-      "rationale": "The OAuth2 endpoint is configurable rather than a fixed internal value, and each login sends credential data via requests.post without a timeout (lines 36\u201338, 50\u201362). A stalled or unresponsive endpoint can therefore hold the authentication request indefinitely, enabling resource exhaustion/denial of service.",
+      "rationale": "The configured OAuth2 endpoint is contacted synchronously with requests.post and no timeout, so a slow or nonresponsive endpoint can hold the login worker/request indefinitely; the endpoint is configuration-controlled and no timeout is set at this call site (lines 36\u201341, 60\u201362).",
       "evidence": [
         {
           "path": "radicale/auth/oauth2.py",
-          "start_line": 34,
+          "start_line": 33,
           "end_line": 42
         },
         {
           "path": "radicale/auth/oauth2.py",
           "start_line": 48,
-          "end_line": 62
+          "end_line": 70
         }
       ]
     },
@@ -46,17 +46,12 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "SHA-1 is used only to compare serialized event details and decide whether to send update notifications, not for authentication, integrity, or another security property (lines 222\u2013250, 1092\u20131098). A collision could theoretically suppress a notification, but this comparison is not a security boundary.",
+      "rationale": "SHA-1 is used only to compare serialized event details for equality, not as a security mechanism; a collision could at most make change detection miss a difference. The hashed dictionaries are assembled from event fields and compared at lines 229\u2013250.",
       "evidence": [
         {
           "path": "radicale/hook/email/__init__.py",
           "start_line": 222,
           "end_line": 250
-        },
-        {
-          "path": "radicale/hook/email/__init__.py",
-          "start_line": 1092,
-          "end_line": 1098
         }
       ]
     },
@@ -69,27 +64,22 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`pickle.load` executes pickle reconstruction without restricting globals, and the resulting bytes are read directly from the configured sharing database at line 131 (with similar loads in list/update/delete). The database path can be configured or defaults beneath the filesystem storage, so anyone able to plant or alter a sharing record can trigger arbitrary pickle code when normal sharing operations read it; the version check occurs only after deserialization.",
+      "rationale": "The file-backed sharing database deserializes its records with unrestricted pickle at line 131, and does the same during directory-wide listing (lines 201\u2013208); pickle can execute attacker-controlled reducers before the version check. The records are written as pickles by this code, but no integrity/authenticity validation of files is performed before loading, so a party able to place or alter a database file can trigger code execution when sharing records are read.",
       "evidence": [
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 35,
-          "end_line": 45
-        },
-        {
-          "path": "radicale/sharing/files.py",
-          "start_line": 95,
-          "end_line": 103
-        },
-        {
-          "path": "radicale/sharing/files.py",
           "start_line": 127,
-          "end_line": 134
+          "end_line": 136
         },
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 201,
-          "end_line": 212
+          "start_line": 194,
+          "end_line": 214
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 276,
+          "end_line": 282
         }
       ]
     },
@@ -102,17 +92,17 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`database_list_sharing` opens each regular file in the sharing database directory and passes its contents directly to `pickle.load` (lines 201\u2013208), which can execute code during deserialization. The directory is derived from configured/default storage paths (lines 37\u201344, 64\u201370), so an attacker who can plant or modify a database file can reach the unsafe primitive.",
+      "rationale": "The list operation unconditionally unpickles every regular file found in the configured sharing database directory (lines 199\u2013208), and there is no validation before deserialization. A crafted file in that directory can execute pickle payload code when a sharing listing is triggered; normal writes being produced by this application does not make the on-disk files safe if an attacker can modify them.",
       "evidence": [
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 37,
-          "end_line": 70
+          "start_line": 199,
+          "end_line": 214
         },
         {
-          "path": "radicale/sharing/files.py",
-          "start_line": 199,
-          "end_line": 208
+          "path": "SHARING.md",
+          "start_line": 76,
+          "end_line": 78
         }
       ]
     },
@@ -125,22 +115,22 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The files backend reads a stored sharing record with unrestricted `pickle.load` before checking even the version field (files.py:315-319); the same direct deserialization is used by other read paths (files.py:130-131, 207-208). If an attacker can write or replace a file in the configured sharing database directory, invoking an operation that reads it can execute attacker-controlled pickle payloads.",
+      "rationale": "The sharing database files are read directly with pickle.load in the flagged update path (and likewise in retrieval/list/delete), with no validation before deserialization; a crafted pickle can execute arbitrary code during loading. These are filesystem-backed application data files, and their origin/permissions are not shown to be restricted to trusted writers, so attacker-writable database content makes this exploitable.",
       "evidence": [
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 37,
-          "end_line": 44
+          "start_line": 307,
+          "end_line": 316
         },
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 312,
-          "end_line": 321
+          "start_line": 276,
+          "end_line": 281
         },
         {
           "path": "radicale/sharing/files.py",
           "start_line": 194,
-          "end_line": 212
+          "end_line": 209
         }
       ]
     },
@@ -151,19 +141,19 @@
       "line": 374,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": 0,
+      "label": 1,
       "status": "classified",
-      "rationale": "The pickle files are an internal sharing database: records are created and updated by serializing application-generated rows to the configured database path (lines 250\u2013281 and 307\u2013351). The read at line 374 therefore uses persisted application state, not data shown to be attacker-controlled; exposure would require an attacker to already modify the server's database files.",
+      "rationale": "The sharing record is loaded directly with `pickle.load` after only checking that a file exists; the version check occurs after deserialization, so a crafted pickle in the sharing database can execute code before that check. The database files are read in other paths as well, and these lines show records are created as files, but do not establish protection against an attacker able to alter the database.",
       "evidence": [
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 235,
-          "end_line": 281
+          "start_line": 367,
+          "end_line": 380
         },
         {
           "path": "radicale/sharing/files.py",
-          "start_line": 307,
-          "end_line": 374
+          "start_line": 274,
+          "end_line": 281
         }
       ]
     },
@@ -176,17 +166,22 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "The cache entry is deserialized from a server-managed cache path, and this code writes entries there itself using `pickle.dump` of a cache hash and item content (lines 92\u2013100); client-supplied item data is not a pickle stream. The cache hash comparison occurs after unpickling, but there is no indication here that an untrusted client can write or replace cache files, so the flagged primitive is not exposed to attacker-controlled serialized data.",
+      "rationale": "The cache entry is created locally with `pickle.dump` from a `CacheContent` tuple derived from parsed item fields, while reads use a filename based on the resource href and verify a hash before accepting the contents. The request-controlled resource text is not itself treated as pickle data, and the code shown provides no route for a remote user to supply arbitrary pickle bytes; this is a trusted, application-generated cache.",
       "evidence": [
         {
           "path": "radicale/storage/multifilesystem/cache.py",
-          "start_line": 84,
-          "end_line": 124
+          "start_line": 80,
+          "end_line": 113
         },
         {
-          "path": "radicale/storage/multifilesystem/base.py",
-          "start_line": 55,
-          "end_line": 68
+          "path": "radicale/storage/multifilesystem/get.py",
+          "start_line": 86,
+          "end_line": 110
+        },
+        {
+          "path": "radicale/storage/multifilesystem/get.py",
+          "start_line": 129,
+          "end_line": 139
         }
       ]
     },
@@ -197,9 +192,9 @@
       "line": 53,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": 1,
+      "label": 0,
       "status": "classified",
-      "rationale": "The history cache is loaded directly with pickle at line 53, and its location is the filesystem-backed collection cache (lines 50-52); cache files are written via pickle at lines 69-72, but an attacker able to place or alter a cache entry can supply a malicious pickle and achieve code execution when collection sync reaches this load. The cache's intended role as generated data does not make pickle safe against modification by an untrusted party with write access to the storage/cache directory.",
+      "rationale": "The unpickled file is an application-managed history cache entry, not content supplied through an upload: each normal update writes only `[etag, history_etag]` with `pickle.dump` after validating href as a safe path component. A malicious cache file would require write access to the server's filesystem/cache directory, which is outside the attacker-controlled request data path shown here.",
       "evidence": [
         {
           "path": "radicale/storage/multifilesystem/history.py",
@@ -207,14 +202,9 @@
           "end_line": 73
         },
         {
-          "path": "radicale/storage/multifilesystem/base.py",
-          "start_line": 113,
-          "end_line": 129
-        },
-        {
-          "path": "radicale/storage/multifilesystem/sync.py",
-          "start_line": 55,
-          "end_line": 64
+          "path": "radicale/storage/multifilesystem/upload.py",
+          "start_line": 38,
+          "end_line": 68
         }
       ]
     },
@@ -225,24 +215,19 @@
       "line": 102,
       "severity": "HIGH",
       "confidence": "HIGH",
-      "label": 0,
+      "label": 1,
       "status": "classified",
-      "rationale": "The shell command is the explicitly configured storage hook, an administrative command setting documented as a command to run after storage changes; it is not constructed from an untrusted command string. Request-derived placeholders are individually shell-quoted before interpolation, and the hook is empty by default, so the shell=True use is intentional rather than an exploitable injection sink as written.",
+      "rationale": "The configured storage hook is intentionally executed as a shell command (`shell=True`, lines 98\u2013103), and the command is formatted with request-derived `path`, `to_path`, `request`, and `user` values at lines 80\u201391. Although those values are shell-quoted, the hook itself is administrator-configured; attacker influence over its command template is not established here, but its interpolated data can affect the executed shell command and warrants a potential vulnerability label.",
       "evidence": [
         {
           "path": "radicale/storage/multifilesystem/lock.py",
-          "start_line": 61,
+          "start_line": 80,
           "end_line": 103
         },
         {
-          "path": "radicale/config.py",
-          "start_line": 566,
-          "end_line": 569
-        },
-        {
           "path": "DOCUMENTATION.md",
-          "start_line": 661,
-          "end_line": 669
+          "start_line": 1699,
+          "end_line": 1714
         }
       ]
     },
@@ -253,19 +238,19 @@
       "line": 79,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": 1,
+      "label": 0,
       "status": "classified",
-      "rationale": "The pickle is loaded from the filesystem-backed cache with no integrity or trust check; filesystem cache paths can be within the collection storage tree (or a configured cache folder). An attacker able to place/replace a token cache file can supply a malicious pickle, and the old-token name format check only constrains the filename, not file contents, so unpickling can execute code.",
+      "rationale": "The client-controlled sync token is restricted to a 64-character lowercase hexadecimal name before it is used in the cache path (lines 39\u201354), and the corresponding pickle is created internally from the collection state via `pickle.dump` (lines 91\u2013100). No request-provided pickle bytes reach `pickle.load`; exploitation would require an attacker to alter the server\u2019s cache file outside the shown request flow.",
       "evidence": [
         {
           "path": "radicale/storage/multifilesystem/sync.py",
-          "start_line": 47,
-          "end_line": 80
+          "start_line": 39,
+          "end_line": 54
         },
         {
-          "path": "radicale/storage/multifilesystem/base.py",
-          "start_line": 113,
-          "end_line": 129
+          "path": "radicale/storage/multifilesystem/sync.py",
+          "start_line": 70,
+          "end_line": 100
         }
       ]
     }

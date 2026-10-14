@@ -84,13 +84,13 @@ For example, Radicale with the full budget and then with the low budget:
 The output folder gets `report.json`, `trace.jsonl` and a copy of the config as
 `config.toml`. When the run ends the agent prints one line with the terminal status and the
 label counts, for example
-`completed: 10 alerts: label 1 = 6, label 0 = 4, null = 0; used 217408 of 800000 tokens`.
+`completed: 10 alerts: label 1 = 6, label 0 = 4, null = 0; used 178288 of 800000 tokens`.
 If the run crashes, the command exits with an error, but `report.json` and `trace.jsonl`
 are still written and the trace ends with a `crashed` terminal event. I suggest writing to
 `out/` (git-ignored) so the committed runs in `runs/` are not overwritten.
 
-In my final runs a full run took about 110 s and 217k tokens on Radicale, 248 s and 388k
-tokens on SGLang, and 137 s and 95k tokens on OWASP.
+In my final runs a full run took about 100 s and 178k tokens on Radicale, 282 s and 419k
+tokens on SGLang, and 150 s and 88k tokens on OWASP.
 
 ## Configs
 
@@ -98,7 +98,7 @@ There are two configs, and both validate against `config.schema.json`:
 
 | File | max_tokens | What it is for |
 |---|---|---|
-| `configs/full.toml` | 800,000 | enough for a complete run on all three targets (SGLang, the biggest, used 388k) |
+| `configs/full.toml` | 800,000 | enough for a complete run on all three targets (SGLang, the biggest, used 419k) |
 | `configs/low.toml` | 60,000 | runs out partway through Radicale; in my run 3 alerts were classified and the other 7 got `budget_exhausted` |
 
 Everything else is the same in both: `provider = "openai"`, `name = "gpt-6-luna"`,

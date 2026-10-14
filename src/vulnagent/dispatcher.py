@@ -150,6 +150,13 @@ class Dispatcher:
         self.trace.tool_result(alert_id, name, ok=True, chars=len(text))
         return Observation(call_id, name, True, text)
 
+    def decline(self, alert_id: str, call_id: str, name: str, raw_args: str, reason: str) -> Observation:
+        """Record a request the runtime will not run, still as a tool_request/tool_result pair."""
+        name = name or "(missing)"
+        args, _ = self._parse(raw_args)
+        self.trace.tool_request(alert_id, name, args)
+        return self._refuse(alert_id, call_id, name, reason)
+
     @staticmethod
     def _parse(raw_args: str) -> tuple[dict, str | None]:
         try:

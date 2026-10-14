@@ -10,7 +10,7 @@
   },
   "budget": {
     "max_tokens": 800000,
-    "used_tokens": 388281,
+    "used_tokens": 418858,
     "exhausted": false
   },
   "alerts": [
@@ -23,8 +23,13 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`recv_object` reads a size and serialized bytes from another distributed rank and passes them directly to `pickle.loads` without validation (lines 510\u2013532); `recv_tensor_dict` uses this for metadata from its source rank (lines 658\u2013677). A compromised or otherwise untrusted rank in the process group can therefore send a pickle payload that executes code in the receiving process.",
+      "rationale": "recv_object deserializes bytes received over the distributed CPU process group directly with pickle.loads, which can execute attacker-controlled pickle payloads. The source is selected as a rank in the group, but no authenticity or safe-deserialization check is applied, so a compromised or otherwise untrusted peer rank can exploit this primitive; send_object confirms these bytes are peer-transmitted.",
       "evidence": [
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/group_coordinator.py",
+          "start_line": 473,
+          "end_line": 496
+        },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/group_coordinator.py",
           "start_line": 500,
@@ -32,8 +37,8 @@
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/group_coordinator.py",
-          "start_line": 658,
-          "end_line": 677
+          "start_line": 167,
+          "end_line": 180
         }
       ]
     },
@@ -46,22 +51,17 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`recv_obj` directly unpickles bytes returned by the shared `TCPStore` without validation, and `broadcast_obj` uses the same pattern; a participant able to write the store can supply a malicious pickle that executes during deserialization. The API is explicitly for inter-process metadata, so trust relies on all ranks/store participants being trusted, which is not enforced here.",
+      "rationale": "`recv_obj` directly passes bytes retrieved from the shared TCPStore to `pickle.loads` without validation (lines 114\u2013120); anyone able to write to that store under the expected key can supply a pickle that executes code when deserialized. The API is explicitly for inter-process metadata and normal sends serialize Python objects, but that does not establish that the store contents are protected from an untrusted participant.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
           "start_line": 67,
-          "end_line": 76
+          "end_line": 77
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
           "start_line": 95,
           "end_line": 120
-        },
-        {
-          "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
-          "start_line": 122,
-          "end_line": 138
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
@@ -79,8 +79,13 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "`broadcast_obj` deserializes bytes read from the TCPStore without authentication or validation (lines 122\u2013138); a party able to write to that store can supply a malicious pickle and execute code in the receiving process. The store is the metadata communication channel among ranks, so this is exploitable if its endpoint or participating ranks are attacker-controlled, rather than a guaranteed vulnerability in a fully trusted cluster.",
+      "rationale": "The received bytes come directly from a TCPStore entry and are passed to pickle.loads without validation; the same class writes broadcast payloads into that store, and its documented purpose is communication among ranks. Any party able to write/poison the store entry (for example, a compromised or unauthorized participant with access to the store) can trigger pickle deserialization behavior in the receiving process, so this is a potential vulnerability rather than a safe constant-data use.",
       "evidence": [
+        {
+          "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
+          "start_line": 67,
+          "end_line": 76
+        },
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
           "start_line": 122,
@@ -89,7 +94,7 @@
         {
           "path": "python/sglang/multimodal_gen/runtime/distributed/utils.py",
           "start_line": 183,
-          "end_line": 188
+          "end_line": 195
         }
       ]
     },
@@ -102,13 +107,8 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The image processor loader passes the supplied component_model_path directly to Hugging Face from_pretrained without forwarding server_args.revision, so when this path is a Hub repository ID it resolves the mutable default revision rather than a pinned commit. The same loader interface is also used by the native loaders that explicitly pass revision, making the omission here concrete; users controlling the model path can therefore load changed or malicious repository content.",
+      "rationale": "The image-processor loader passes the supplied component model identifier/path directly to Hugging Face `from_pretrained` without a `revision` argument, so a remote Hub repository resolves its mutable default revision. The caller-level loader also routes that path into this customized loader, with no pinning or validation shown in these lines.",
       "evidence": [
-        {
-          "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
-          "start_line": 137,
-          "end_line": 167
-        },
         {
           "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
           "start_line": 261,
@@ -116,7 +116,7 @@
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
-          "start_line": 314,
+          "start_line": 308,
           "end_line": 342
         }
       ]
@@ -130,11 +130,11 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The processor loader passes component_model_path directly to Hugging Face from_pretrained without supplying server_args.revision, so a Hub model reference can resolve to mutable, unpinned content; the base native loader shows revision is available and passed explicitly for other loads (lines 149\u2013159). Component paths are formed from the pipeline model path and its component name (lines 299\u2013305), so the path is not necessarily a local-only trusted artifact.",
+      "rationale": "The processor loader passes component_model_path directly to Hugging Face from_pretrained with no revision argument, so a Hub repository resolves to its current default revision rather than a pinned commit; the adjacent native-loading path explicitly uses server_args.revision (lines 149\u2013159), but this customized processor path does not. Thus a mutable or attacker-controlled Hub model reference can change what is downloaded between loads.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
-          "start_line": 149,
+          "start_line": 146,
           "end_line": 159
         },
         {
@@ -143,9 +143,9 @@
           "end_line": 282
         },
         {
-          "path": "python/sglang/multimodal_gen/runtime/pipelines_core/composed_pipeline_base.py",
-          "start_line": 288,
-          "end_line": 305
+          "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
+          "start_line": 330,
+          "end_line": 342
         }
       ]
     },
@@ -158,22 +158,17 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The tokenizer loader passes `component_model_path` directly to `AutoTokenizer.from_pretrained()` without a revision argument (lines 294\u2013297), so a Hub model reference resolves to the mutable default revision. Although native model loading uses `server_args.revision` (lines 149\u2013159), this customized tokenizer path does not; `server_args.revision` is optional and does not pin this download.",
+      "rationale": "The tokenizer loader passes component_model_path to Hugging Face AutoTokenizer.from_pretrained without forwarding server_args.revision, unlike the native loaders that explicitly pass that revision (lines 154\u2013159, 163\u2013167). Thus when the component path identifies a Hub repository, loading follows the mutable default revision rather than a pinned/configured revision; this is a real unpinned download path.",
       "evidence": [
+        {
+          "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
+          "start_line": 137,
+          "end_line": 167
+        },
         {
           "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
           "start_line": 285,
           "end_line": 297
-        },
-        {
-          "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/component_loader.py",
-          "start_line": 149,
-          "end_line": 159
-        },
-        {
-          "path": "python/sglang/multimodal_gen/runtime/server_args.py",
-          "start_line": 256,
-          "end_line": 256
         }
       ]
     },
@@ -186,7 +181,7 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The loader accepts .bin/.pt checkpoint files from a caller-specified local model directory and passes them to _load_pt_file; when a file triggers the legacy-tar RuntimeError, it is deserialized with weights_only=False, enabling pickle code execution from a malicious checkpoint. The docstring's claim of trusted HuggingFace sources is not enforced here: the path is asserted merely to be local.",
+      "rationale": "The fallback explicitly invokes unrestricted pickle-based loading (`weights_only=False`) when a file triggers the legacy-tar RuntimeError, so a crafted checkpoint can execute code during deserialization. The files come from a local model directory and are globbed as `.bin`/potentially `.pt` inputs without integrity or trust validation; the comment's claim of trusted HuggingFace sources is not enforced (the code even asserts the path is local).",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/loader/weight_utils.py",
@@ -194,14 +189,9 @@
           "end_line": 236
         },
         {
-          "path": "python/sglang/multimodal_gen/runtime/loader/weight_utils.py",
-          "start_line": 239,
-          "end_line": 255
-        },
-        {
           "path": "python/sglang/multimodal_gen/runtime/loader/component_loaders/text_encoder_loader.py",
           "start_line": 95,
-          "end_line": 112
+          "end_line": 126
         }
       ]
     },
@@ -214,22 +204,22 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The ROUTER socket unpickles payloads received from REQ clients without authentication or validation (scheduler.py:268-276), and the client API sends caller-provided batches directly over that connection (scheduler_client.py:79-83). Since pickle deserialization can execute attacker-controlled reducers, any party able to connect to the scheduler endpoint can potentially achieve code execution in the scheduler process; malformed-payload exception handling does not prevent this.",
+      "rationale": "The scheduler directly unpickles the final frame of any multipart message received on its ROUTER socket, before validating the decoded object. That endpoint is a TCP endpoint derived from the configured host, so a party able to reach it can submit a crafted pickle and execute code in the scheduler process; the internal-client expectation does not make the pickle safe.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/managers/scheduler.py",
-          "start_line": 264,
-          "end_line": 279
+          "start_line": 268,
+          "end_line": 277
         },
         {
-          "path": "python/sglang/multimodal_gen/runtime/scheduler_client.py",
-          "start_line": 79,
-          "end_line": 83
+          "path": "python/sglang/multimodal_gen/runtime/server_args.py",
+          "start_line": 927,
+          "end_line": 935
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/managers/scheduler.py",
-          "start_line": 66,
-          "end_line": 76
+          "start_line": 328,
+          "end_line": 337
         }
       ]
     },
@@ -242,7 +232,7 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "Both from_pretrained calls receive subdirectories joined to model_dir, rather than a Hub repository identifier; these are local model paths, so omitting revision does not select an unpinned remote revision. No call site to this class appears in the searched repository, and the flagged invocation itself has no attacker-supplied Hub identifier (lines 22\u201327).",
+      "rationale": "The calls use `model_dir` plus fixed `tokenizer`/`clip_text_encoder` subpaths (lines 22\u201327), consistent with loading components from a local model bundle rather than selecting a Hub repository revision. A repository-wide search found no call sites for `HunyuanClip`, so there is no demonstrated attacker-controlled Hub download path for this flagged call.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/models/encoders/bert.py",
@@ -260,7 +250,7 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "The flagged call passes a path formed by appending `clip_text_encoder` to `model_dir`; this is intended to load the model from a local directory, not a Hub repository identifier. No Hub download or unpinned Hub revision is shown at this call site, so B615 does not identify an exploitable issue here (lines 18\u201327).",
+      "rationale": "The argument is constructed as a model subdirectory (`model_dir/clip_text_encoder`), rather than passed as a bare Hugging Face repository ID; a missing local path does not identify a valid Hub repo in this form. Thus this call does not present an unpinned remote model download risk as written (lines 25\u201327).",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/models/encoders/bert.py",
@@ -278,7 +268,7 @@
       "confidence": "HIGH",
       "label": 0,
       "status": "classified",
-      "rationale": "The value is read from a temporary directory created by this call, after a subprocess launched with a fixed module command completes successfully; it is the subprocess result, not attacker-supplied serialized data. The subprocess operation and inspected model class are part of the local model-registry workflow, so this pickle load is not exposed to untrusted input in the code shown (lines 161\u2013186, 200\u2013203).",
+      "rationale": "The pickle is read from a newly created temporary directory after a locally launched subprocess has completed successfully; the parent itself supplies the subprocess input via cloudpickle, and the result is used for internal model inspection. No attacker-controlled file or network data is shown reaching this deserialization, so the flagged load is trusted local IPC in this flow (lines 161\u2013186, 200\u2013203).",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/models/registry.py",
@@ -288,7 +278,7 @@
         {
           "path": "python/sglang/multimodal_gen/runtime/models/registry.py",
           "start_line": 200,
-          "end_line": 203
+          "end_line": 207
         }
       ]
     },
@@ -301,22 +291,17 @@
       "confidence": "LOW",
       "label": 1,
       "status": "classified",
-      "rationale": "The HTTP generation endpoint accepts an image/image_url value from each request and passes it into image_path (http_server.py:180\u2013196); input validation then calls load_image on that value (input_validation.py:271\u2013292). For attacker-supplied URLs, load_image performs requests.get with streaming but no timeout (vision_utils.py:105\u2013107), allowing a remote server that stalls to tie up request-processing resources indefinitely, so the missing timeout is exploitable as a denial of service.",
+      "rationale": "The HTTP image URL is passed directly to requests.get with streaming enabled and no timeout, and image_path can come from the caller's request field; a slow or nonresponsive remote host can therefore hold up image loading/request processing indefinitely. The scheme check only selects URL handling and imposes no host or timing constraint.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/models/vision_utils.py",
-          "start_line": 105,
-          "end_line": 108
-        },
-        {
-          "path": "python/sglang/multimodal_gen/runtime/pipelines_core/stages/input_validation.py",
-          "start_line": 269,
-          "end_line": 293
+          "start_line": 91,
+          "end_line": 112
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/entrypoints/http_server.py",
-          "start_line": 180,
-          "end_line": 196
+          "start_line": 170,
+          "end_line": 197
         }
       ]
     },
@@ -329,7 +314,7 @@
       "confidence": "LOW",
       "label": 1,
       "status": "classified",
-      "rationale": "`load_video` accepts any HTTP(S) URL and calls `requests.get(..., stream=True)` without a timeout; response handling and chunk iteration can therefore wait indefinitely on a slow or unresponsive server. The function is reached with `batch.image_path` values during input validation, so this is an availability risk when a caller supplies a remote video URL.",
+      "rationale": "`load_video` accepts HTTP(S) URLs and performs `requests.get(..., stream=True)` without a timeout, then iterates the response body; the request can therefore hang indefinitely on an unresponsive or stalled remote endpoint. The image-path validation invokes this loader for `.mp4` inputs without imposing a timeout or other bound on the request.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/models/vision_utils.py",
@@ -352,7 +337,7 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The stage passes `model_path` directly to Hugging Face `from_pretrained` without a `revision` pin (lines 121\u2013123). The pipeline obtains that value from `self.model_path` (lines 118\u2013125), so selecting a remote repository's mutable default revision can change which model code/weights are downloaded; this is the unpinned-download risk flagged by B615.",
+      "rationale": "The pipeline passes its configured model_path directly into Transformers `from_pretrained` with no revision pin (lines 121\u2013123); the path originates from the pipeline's model path configuration (qwen_image.py lines 116\u2013125). If configured as a Hugging Face repository, this resolves the default moving revision, so downloaded model code/weights are not pinned against repository changes.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/pipelines_core/stages/model_specific_stages/qwen_image_layered.py",
@@ -361,7 +346,7 @@
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/pipelines/qwen_image.py",
-          "start_line": 105,
+          "start_line": 116,
           "end_line": 125
         }
       ]
@@ -375,12 +360,17 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The broker binds a TCP socket on all interfaces and directly unpickles bytes received from connected clients without authentication or validation (scheduler_client.py:19\u201329). An attacker able to reach the broker port can send a crafted pickle that executes code during deserialization.",
+      "rationale": "The broker binds a TCP socket on all interfaces and directly passes each received client-controlled payload to pickle.loads with no authentication or validation, allowing a reachable client to trigger pickle deserialization effects. The broker is started as part of the HTTP server lifespan (lines 49\u201350), so this is an active network-facing path.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/scheduler_client.py",
-          "start_line": 19,
-          "end_line": 29
+          "start_line": 13,
+          "end_line": 30
+        },
+        {
+          "path": "python/sglang/multimodal_gen/runtime/entrypoints/http_server.py",
+          "start_line": 38,
+          "end_line": 50
         }
       ]
     },
@@ -393,22 +383,17 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The server-side broker binds a wildcard TCP REP socket and unconditionally `pickle.loads` each received client payload, so any peer able to reach the broker port can supply a malicious pickle and execute code in the server process. The same deserializer is also used for scheduler responses without validation; the broker exposure alone is sufficient for this finding.",
+      "rationale": "The flagged deserialization consumes an arbitrary reply received from the configured scheduler endpoint and immediately executes pickle loading without authentication or validation; a malicious or compromised service reachable at that endpoint can provide a pickle payload that executes code in the client process. The scheduler endpoint host is configurable, so this is not intrinsically restricted to a trusted in-process value.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/scheduler_client.py",
-          "start_line": 13,
-          "end_line": 30
-        },
-        {
-          "path": "python/sglang/multimodal_gen/runtime/entrypoints/http_server.py",
-          "start_line": 45,
-          "end_line": 50
+          "start_line": 160,
+          "end_line": 166
         },
         {
           "path": "python/sglang/multimodal_gen/runtime/server_args.py",
-          "start_line": 365,
-          "end_line": 367
+          "start_line": 927,
+          "end_line": 935
         }
       ]
     },
@@ -419,19 +404,24 @@
       "line": 57,
       "severity": "MEDIUM",
       "confidence": "HIGH",
-      "label": 0,
+      "label": 1,
       "status": "classified",
-      "rationale": "This deserialization is the receiver side of an internal distributed broadcast: the source rank first creates the payload with `pickle.dumps(data)`, then broadcasts those bytes, and non-source ranks unpickle them (distributed.py:29-44, 45-58). The request/batch call sites use this same rank-group mechanism, so ordinary user-supplied object fields are serialized as data by the trusted source rather than supplied as pickle opcodes; no untrusted serialized input is shown reaching this `loads`.",
+      "rationale": "The receiver deserializes the byte payload received from the distributed process group directly with pickle.loads, with no validation or trust check (lines 46\u201357). Because the payload is supplied by the source rank, a compromised or otherwise attacker-controlled rank can send a pickle that executes code during loading; the callers use this for inter-rank request/batch synchronization (scheduler.py lines 294\u2013315; parallel_executor.py lines 38\u201353, 80\u201386).",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/utils/distributed.py",
-          "start_line": 29,
+          "start_line": 46,
           "end_line": 58
         },
         {
+          "path": "python/sglang/multimodal_gen/runtime/managers/scheduler.py",
+          "start_line": 294,
+          "end_line": 315
+        },
+        {
           "path": "python/sglang/multimodal_gen/runtime/pipelines_core/executors/parallel_executor.py",
-          "start_line": 35,
-          "end_line": 53
+          "start_line": 80,
+          "end_line": 86
         }
       ]
     },
@@ -444,13 +434,8 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The wrapper forwards kwargs but does not require or set a revision, and the remote-model paths call it without one; the underlying Hub default therefore resolves the mutable repository default branch. An attacker able to alter/publish the referenced model can change what code/weights are downloaded, making this an unpinned supply-chain download (the flagged line itself is generic, but reachable call sites omit revision).",
+      "rationale": "The wrapper forwards arbitrary kwargs but neither it nor its remote callers supply a revision; model IDs are passed through as selected by the caller, and downloads consequently resolve the Hub's mutable default branch (lines 486-494, 694-711). This permits repository updates to change the downloaded model without a pinned revision, so the B615 finding is applicable for these model downloads.",
       "evidence": [
-        {
-          "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
-          "start_line": 775,
-          "end_line": 799
-        },
         {
           "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
           "start_line": 486,
@@ -459,7 +444,12 @@
         {
           "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
           "start_line": 694,
-          "end_line": 725
+          "end_line": 711
+        },
+        {
+          "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
+          "start_line": 775,
+          "end_line": 799
         }
       ]
     },
@@ -472,7 +462,7 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The wrapper forwards caller-supplied kwargs unchanged and does not set a default revision, so Hub requests without an explicit revision resolve the repository's mutable default branch. The normal download path passes the model identifier without revision at lines 705\u2013711, allowing upstream changes to alter downloaded model content.",
+      "rationale": "The wrapper forwards arbitrary caller kwargs but does not require a revision, and the operational callers shown pass only model identifiers and download options; the Hub therefore resolves a mutable default branch/revision. Downloading code/model artifacts from that moving reference can silently change what is executed or loaded, so this is a genuine supply-chain pinning risk.",
       "evidence": [
         {
           "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
@@ -483,6 +473,11 @@
           "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
           "start_line": 694,
           "end_line": 726
+        },
+        {
+          "path": "python/sglang/multimodal_gen/runtime/utils/hf_diffusers_utils.py",
+          "start_line": 221,
+          "end_line": 225
         }
       ]
     },
@@ -495,7 +490,7 @@
       "confidence": "HIGH",
       "label": 1,
       "status": "classified",
-      "rationale": "The script accepts a path from the command line or enumerates pickle files in a user-specified folder, then directly passes each file to `pickle.load` without validation (lines 158\u2013171, 54\u201361). A crafted pickle can execute attacker-controlled code during deserialization, so this is a potential vulnerability when an attacker can influence the selected input file or folder.",
+      "rationale": "`read_records` directly unpickles every file with no validation, and the CLI accepts an arbitrary `--input-file` or scans an arbitrary `--input-folder` before calling it. Python pickle loading can execute attacker-controlled reconstruction code, so replaying a supplied or shared untrusted dump permits code execution; the documented request/crash dumps being produced internally does not make externally obtained files safe.",
       "evidence": [
         {
           "path": "scripts/playground/replay_request_dump.py",
@@ -504,8 +499,13 @@
         },
         {
           "path": "scripts/playground/replay_request_dump.py",
-          "start_line": 158,
+          "start_line": 137,
           "end_line": 171
+        },
+        {
+          "path": "docs/advanced_features/observability.md",
+          "start_line": 18,
+          "end_line": 35
         }
       ]
     },
@@ -518,17 +518,22 @@
       "confidence": "LOW",
       "label": 0,
       "status": "classified",
-      "rationale": "This is a replay/benchmark utility that posts to the explicitly configured host and port, defaulting to localhost, and the absent timeout can cause a replay worker to wait indefinitely but does not create an exploitable security boundary issue. The request is made from locally loaded replay records and no security-sensitive operation depends on its completion.",
+      "rationale": "This is a local replay utility posting to a user-configured host, and the absence of a timeout can cause a replay worker to wait indefinitely but does not by itself expose untrusted input or create an exploitable security condition. The request is performed by the replay script in its worker and exceptions are caught, with no security-sensitive operation relying on timely completion (lines 83\u201387, 107\u2013116).",
       "evidence": [
         {
           "path": "scripts/playground/replay_request_dump.py",
-          "start_line": 75,
-          "end_line": 87
+          "start_line": 83,
+          "end_line": 97
+        },
+        {
+          "path": "scripts/playground/replay_request_dump.py",
+          "start_line": 107,
+          "end_line": 116
         },
         {
           "path": "scripts/playground/replay_request_dump.py",
           "start_line": 137,
-          "end_line": 155
+          "end_line": 154
         }
       ]
     }

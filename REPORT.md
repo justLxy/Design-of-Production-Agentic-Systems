@@ -38,7 +38,11 @@ lines past the end of the file.
 stateDiagram-v2
     [*] --> discover
     discover --> triage: next alert (runtime)
-    discover --> crashed: Bandit failed (runtime)
+    discover --> crashed: Bandit failed or uncaught exception (runtime)
+    triage --> crashed: uncaught exception (runtime)
+    tools --> crashed: uncaught exception (runtime)
+    nudge --> crashed: uncaught exception (runtime)
+    settle --> crashed: uncaught exception (runtime)
     triage --> tools: reply has tool calls (model)
     triage --> nudge: text but no tool call (runtime)
     triage --> settle: reply cut off or API error, row = error (runtime)
@@ -70,24 +74,33 @@ The graph has five nodes:
 | nudge | Appends a user message asking the model to call a tool or submit |
 | settle | Writes the alert's one `state_change` and its report row |
 
-Each edge writes a `routing` event, and its `by` field says who made the decision:
+These are all the edges in the diagram. Most of them write a `routing` event whose `by`
+field says who made the decision. Three kinds do not, because another event already
+records them: the edges into crashed (the `crashed` terminal event, plus a failed Bandit
+`tool_result` when Bandit is the cause), tools → settle (the `state_change` with
+`node = "submit"`) and settle → completed (the `completed` terminal event).
 
-| From → to | Conditional or fixed | Decided by | `decision` |
+| From → to | Conditional or fixed | Decided by | `routing.decision` |
 |---|---|---|---|
-| start of an alert → triage | fixed | runtime | `triage` |
+| discover → triage, settle → triage | conditional (there is a next alert) | runtime | `triage` |
+| any node → crashed | conditional (Bandit failed, or an uncaught exception such as a bug or Ctrl+C) | runtime | no routing event |
 | triage → tools | conditional | model (it chose to call tools) | `tools`, or `submit` if the calls include submit |
 | triage → nudge | conditional | runtime (no tool call in the reply) | `nudge` |
 | triage → settle (error) | conditional | runtime (reply cut off at the output allowance, or API error) | `error` |
+| tools → settle (classified) | conditional | runtime (submit passed validation) | no routing event |
 | tools → triage | fixed | runtime | `triage` |
-| tools → settle (classified) | conditional | runtime (submit passed validation) | none; the `state_change` with `node = "submit"` records it |
-| triage → stop | conditional | runtime | `budget_exhausted` or `max_steps` |
-| tools / nudge → stop | conditional | runtime | `no_progress` |
+| nudge → triage | fixed | runtime | `triage` |
+| settle → completed | conditional (no alerts left) | runtime | no routing event |
+| triage → budget_exhausted | conditional | runtime | `budget_exhausted` |
+| triage → max_steps | conditional | runtime | `max_steps` |
+| tools → no_progress, nudge → no_progress | conditional | runtime | `no_progress` |
 
 ## A4. Agent state
 
 | Field | Lifetime | Written by | Reducer | Model sees it? |
 |---|---|---|---|---|
-| `alerts` | run | discover | set once | only the current alert, through the first user message |
+| `alerts` | run | discover | set once | no |
+| `alert` (in `AlertState`) | alert | `_investigate`, when the alert starts | set once, never changed | yes, through the first user message |
 | `rows` | run | settle | insert once per `alert_id`; a second insert raises an error | no |
 | `steps` | run | triage, tools | +1 per model call and per tool execution | no |
 | token ledger (`Trace._usage_total`) | run | `Trace.model_call` | sum of each counter | no |
@@ -141,7 +154,9 @@ characters, and 1 to 5 `evidence` objects with `path`, `start_line` and `end_lin
 refuses anything that does not match the schema, an evidence file that does not exist in
 the copy, and a line range outside the file. A refused submit goes back to the model so it
 can try again. An accepted submit settles the alert as `classified`, and a leading `./` in
-evidence paths is removed before the row is written.
+evidence paths is removed before the row is written. If the same reply has more tool
+calls after an accepted submit, they are not run, but each one is still written as a
+`tool_request` followed by a refused `tool_result`.
 
 ## A6. Start, stop and termination
 
@@ -196,8 +211,8 @@ added since, with `len(json.dumps(new items)) / 3 + 50`. Dividing by 3 instead o
 runtime writes a `routing` event with `remaining` and `required`, and every alert without a
 row, including the current one, gets `budget_exhausted`. After one failed check no more
 model calls are made in that run. In the final `radicale-low` run the cutoff happened in
-the fourth alert, and the `routing` event shows `remaining = 11725` and
-`required = 13146`.
+the fourth alert, and the `routing` event shows `remaining = 6607` and
+`required = 8706`.
 
 ## A7. Workspace and withholding
 
@@ -243,20 +258,21 @@ block swapped in, and each run folder also has the `config.toml` it used. The se
 
 | Run | Terminal status | Tokens used | Label 1 | Label 0 | null |
 |---|---|---|---|---|---|
-| radicale-full | completed | 217,408 | 6 | 4 | 0 |
-| radicale-low | budget_exhausted | 48,275 | 2 | 1 | 7 |
-| sglang-full | completed | 388,281 | 16 | 5 | 0 |
-| sglang-low | budget_exhausted | 54,854 | 2 | 0 | 19 |
-| owasp-full | completed | 95,257 | 8 | 10 | 0 |
-| owasp-low | budget_exhausted | 55,878 | 3 | 9 | 6 |
+| radicale-full | completed | 178,288 | 6 | 4 | 0 |
+| radicale-low | budget_exhausted | 53,393 | 2 | 1 | 7 |
+| sglang-full | completed | 418,858 | 17 | 4 | 0 |
+| sglang-low | budget_exhausted | 50,434 | 3 | 0 | 18 |
+| owasp-full | completed | 88,207 | 8 | 10 | 0 |
+| owasp-low | budget_exhausted | 55,338 | 0 | 6 | 12 |
 ### OWASP precision and recall
 
 I scored the OWASP runs against `expectedresults-0.1.csv` (18
 alerts, 8 of them real vulnerabilities in the key). The final run `runs/owasp-full` got
-TP 7, FP 1, TN 9, FN 1, which is precision 0.88, recall 0.88 and accuracy 0.89. The two
-mistakes were BenchmarkTest00017 B317, where the model agreed that external entities are
-off by default but still said 1 because internal entity expansion is not blocked, and
-BenchmarkTest00058 B324, which I explain below.
+TP 6, FP 2, TN 8, FN 2, which is precision 0.75, recall 0.75 and accuracy 0.78. The two
+false positives were both BenchmarkTest00017 (B317 and B318). The model read the comment
+that SAX features are off by default, but still said 1 because the code does not reject
+DTDs, so entity expansion could still use up resources. The two false negatives were
+BenchmarkTest00054 and 00058 (B324), which I explain below.
 
 I ran OWASP several times while tuning and read the rationale of every wrong row:
 
@@ -264,7 +280,7 @@ I ran OWASP several times while tuning and read the rationale of every wrong row
 |---|---|---|---|---|---|---|---|
 | owasp-full-prompt-v1 | first prompt, low | 8 | 3 | 7 | 0 | 0.73 | 1.00 |
 | owasp-full-prompt-v2 | two more prompt bullets, low | 7 | 3 | 7 | 1 | 0.70 | 0.88 |
-| owasp-full (final) | same as v2 | 7 | 1 | 9 | 1 | 0.88 | 0.88 |
+| owasp-full (final) | same as v2 | 6 | 2 | 8 | 2 | 0.75 | 0.75 |
 
 In v1 the false positives were BenchmarkTest00017 (B317 and B318) and BenchmarkTest00075
 (B102). For 00017 the model said the XML parser was open to XXE, but `xml.sax` in Python
@@ -278,12 +294,13 @@ fixed B318 for 00017 but not B317 or 00075, and it got two new mistakes (00058 a
 whose rationales had nothing to do with the new bullets. With 18 alerts and a model that
 does not give the same answer twice, one run is not enough to tell whether a prompt change
 helped. I kept v2 for the final runs because both bullets are true in general and also
-apply to Radicale and SGLang. The final run has exactly the same setup as v2 and made 2
-mistakes instead of 4.
+apply to Radicale and SGLang. The final run has exactly the same setup as v2. It also made
+4 mistakes, but only two of them (00017 B317 and 00058) are the same as in v2.
 
-BenchmarkTest00058 (B324) was wrong in both v2 and the final run. The model found that the
-value being hashed comes from a hard-coded config entry (`a_Value`) and that the cookie is
-stored under a different key, so user input never reaches SHA-1. The answer key marks every
+The B324 false negatives need some explanation. In BenchmarkTest00058 the model found that
+the value being hashed comes from a hard-coded config entry (`a_Value`) and that the cookie
+is stored under a different key, so user input never reaches SHA-1. In 00054 it found the
+same kind of thing for MD5: the hashed string only ever gets the constant `SomeOKString`. The answer key marks every
 MD5 or SHA-1 use in this category as a vulnerability no matter what is hashed. I did not
 change the prompt to match the key here, because on Radicale the model judged a SHA-1 alert
 the same way (SHA-1 only used to compare two event dicts, so label 0), and that is the
@@ -307,32 +324,33 @@ sequenceDiagram
     R->>M: step 4 model_call (input 780, output 33)
     M-->>R: tool call read_file
     R->>R: step 5 routing tools (by model)
-    R->>D: step 6 tool_request read_file radicale/auth/oauth2.py 1-180
+    R->>D: step 6 tool_request read_file radicale/auth/oauth2.py 1-140
     D->>W: resolve path, read lines
-    W-->>D: 180 lines
+    W-->>D: 71 lines (the whole file)
     D-->>R: step 7 tool_result ok (3,403 chars)
     R->>R: step 8 routing triage (by runtime)
-    R->>M: step 9 model_call (input 1,739, output 123, cache_write 1,736)
+    R->>M: step 9 model_call (input 1,739, output 121, cache_write 1,736)
     M-->>R: tool call submit label 1
     R->>R: step 10 routing submit (by model)
-    R->>D: step 11 tool_request submit (evidence 34-42, 48-62)
+    R->>D: step 11 tool_request submit (evidence 33-42, 48-70)
     D->>W: check evidence files and line ranges
     D-->>R: step 12 tool_result ok
     R->>R: step 13 state_change classified, label 1
 ```
 
 The model read the whole file once, saw that `requests.post` to the configurable OAuth2
-endpoint has no timeout, and submitted with two evidence ranges. This alert cost 2,675
-tokens. It is one of the short ones; most Radicale alerts took 4 to 7 model calls.
+endpoint has no timeout, and submitted with two evidence ranges. This alert cost 2,673
+tokens. It is one of the short ones; most Radicale alerts took 3 to 6 model calls.
 
 ## C3. Limitations and alternatives
 
-Almost all of the cost is input. In `radicale-full`, 214,005 of the 217,408 tokens were
+Almost all of the cost is input. In `radicale-full`, 174,987 of the 178,288 tokens were
 input, because every model call sends the whole conversation again and each tool result
 stays in it until the alert ends. Alerts are also handled one at a time in separate
-conversations, so similar alerts can get different labels. In `radicale-full` the four
-`pickle.load` calls in `radicale/sharing/files.py` got 1, 1, 1 and 0, and the model never
-saw what it had said about the other three.
+conversations, so similar alerts can get different labels. In the development run
+`runs/dev/radicale-full` the four `pickle.load` calls in `radicale/sharing/files.py` got
+1, 1, 0 and 1, and the model never saw what it had said about the other three. In the
+final run all four got 1.
 
 Some limits come from my own design choices. `no_progress` stops the whole run and not just
 the stuck alert, so one stuck alert gives `error` to all the alerts after it. `max_steps` is only checked before model calls, so one
@@ -346,13 +364,13 @@ I compared my design with three other architectures:
 | | My design (one tool loop per alert) | Fixed workflow | Plan-and-execute | Supervisor / worker |
 |---|---|---|---|---|
 | How it works | the model picks the next tool after each result, until it submits | the runtime always reads a fixed window around the flagged line, then one model call gives the label | a planner call lists the files and searches to do, the runtime runs them, a final call gives the label | a supervisor hands alerts (or groups of alerts) to several workers that each run a loop like mine |
-| Cost | about 22k tokens per alert on Radicale, 4 to 7 calls, mostly re-sent input | one call per alert with a few thousand input tokens, much cheaper | about 2 or 3 calls per alert; tool results are not re-sent after every step | workers cost about the same as mine, plus supervisor calls |
-| Latency | sequential; 110 s for Radicale, 248 s for SGLang | lowest, and alerts can run in parallel easily | fewer model round trips; planned reads can run in parallel | lowest wall time, since workers run in parallel |
+| Cost | about 18k tokens per alert on Radicale, 3 to 6 calls, mostly re-sent input | one call per alert with a few thousand input tokens, much cheaper | about 2 or 3 calls per alert; tool results are not re-sent after every step | workers cost about the same as mine, plus supervisor calls |
+| Latency | sequential; 100 s for Radicale, 282 s for SGLang | lowest, and alerts can run in parallel easily | fewer model round trips; planned reads can run in parallel | lowest wall time, since workers run in parallel |
 | Coordination | none between alerts; the budget and step counter are simple counters | none | the plan has to match what the code really looks like; if the first reads show something new, it needs a replan step | the hardest: the token budget and step counter are shared, so each check needs a lock, and the trace needs one writer to keep `step` going up by 1 |
 | Failure behaviour | can loop or wander, which is why I need `max_steps` and `no_progress`; can follow data into other files | cannot loop, but cannot follow data into other files either, so cross-file alerts (the storage hook in `radicale/storage/multifilesystem/lock.py`, which depends on `config.py`) would often be wrong | a bad plan wastes reads, and the plan is made before the model has seen the code | one worker failing does not stop the others; grouping alerts from the same file to one worker would fix the inconsistent `pickle.load` labels |
 
 A fixed workflow would probably be good enough for OWASP, where each case is one short file
-(in the final `owasp-full` run the median alert took 2 model calls and about 3,100 tokens),
+(in the final `owasp-full` run the median alert took 2 model calls and about 2,900 tokens),
 and it would be much cheaper. It would do worse on Radicale and SGLang, where the answer
 often depends on another file. If I built a second version, I would take one idea from
 supervisor/worker and group alerts by file, so that one conversation sees all the related

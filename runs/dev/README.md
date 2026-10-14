@@ -1,11 +1,11 @@
 # Development runs
 
-Runs I made while building and tuning the agent. REPORT.md cites the two OWASP runs in C2.
-The two Radicale runs are the ones I used to pick the token budgets.
+Runs I made while building and tuning the agent. REPORT.md cites the two OWASP runs in C2 and
+`radicale-full` in C3. I used the two Radicale runs to pick the token budgets.
 The files are unedited outputs of `vulnagent`.
 
-They were made before `cli.py` started saving `config.toml` next to the outputs, so the
-settings are listed here. All of them used `provider = "openai"`, `name = "gpt-6-luna"`,
+They were made before `cli.py` started saving `config.toml` next to the outputs. The
+`config.toml` in each folder was rebuilt afterwards from the settings listed here. All of them used `provider = "openai"`, `name = "gpt-6-luna"`,
 `reasoning_effort = "low"`, `output_allowance = 4000` and the required `[scan]` block for
 the target.
 

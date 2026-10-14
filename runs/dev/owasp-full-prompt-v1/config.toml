@@ -1,0 +1,17 @@
+# Rebuilt after the run from the settings in runs/dev/README.md.
+# This run used prompt v1 of SYSTEM_PROMPT (see runs/dev/README.md).
+[scan]
+paths = ["testcode/BenchmarkTest000*.py"]
+exclude = []
+min_severity = "MEDIUM"
+bandit_version = "1.9.4"
+
+[model]
+provider = "openai"
+name = "gpt-6-luna"
+reasoning_effort = "low"
+
+[budget]
+max_tokens = 800000
+output_allowance = 4000
+max_steps = 500

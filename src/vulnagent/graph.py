@@ -132,16 +132,21 @@ class Agent:
             self._track_progress(s, progressed=False)
             self.trace.routing(aid, "nudge", by="runtime")
             s.items.append({"role": "user", "content": NUDGE})
+            self.trace.routing(aid, "triage", by="runtime")
 
     def _run_tools(self, s: AlertState, calls: list[ToolCall]) -> None:
         """Tools node: the dispatcher runs each request in order; submit is checked here too."""
         aid = s.alert["alert_id"]
         progressed = False
-        for call in calls:
+        for i, call in enumerate(calls):
             self.steps += 1
             obs = self.dispatcher.dispatch(aid, call.id, call.name, call.arguments)
             s.items.append(obs.as_item())
             if call.name == "submit" and obs.ok:
+                # Calls after an accepted submit are not run, but each one is still recorded.
+                for rest in calls[i + 1:]:
+                    self.dispatcher.decline(aid, rest.id, rest.name, rest.arguments,
+                                            "not run: this alert was already submitted")
                 args = json.loads(call.arguments)
                 self._settle(s.alert, "submit", "classified", args["label"],
                              args["rationale"], args["evidence"])
