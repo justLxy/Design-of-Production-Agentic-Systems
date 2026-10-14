@@ -1,8 +1,7 @@
 # HW1 Report: Bounded Agent for Bandit Alert Classification
 
-Agent: `vulnagent` (Python 3.12, OpenAI `gpt-6-luna` through the Responses API).
-Code is in `src/vulnagent/`, tests in `tests/`, final runs in `runs/<target>-<budget>/`,
-development runs in `runs/dev/`.
+Agent: `vulnagent` (Python 3.12, OpenAI `gpt-6-luna` through the Responses API). The final
+runs are in `runs/<target>-<budget>/` and the development runs in `runs/dev/`.
 
 ## A1. Behaviours
 
@@ -59,20 +58,17 @@ stateDiagram-v2
     crashed --> [*]
 ```
 
-`crashed` can also happen from any state if an exception escapes (a bug, Ctrl+C). I did
-not draw that arrow from every node because the diagram gets hard to read.
-
 ## A3. Nodes and edges
 
 The graph has five nodes:
 
-| Node | What it does | Code |
-|---|---|---|
-| discover | Runs Bandit over the `[scan]` scope and parses the alerts | `cli.discover`, `bandit_tool.run_bandit` |
-| triage | Checks `max_steps`, then the budget, then makes one model call and writes `model_call` | `Agent._triage` |
-| tools | Sends each tool request to the dispatcher in order; `submit` is checked here too | `Agent._run_tools`, `Dispatcher.dispatch` |
-| nudge | Appends a user message asking the model to call a tool or submit | `Agent._route` |
-| settle | Writes the alert's one `state_change` and its report row | `Agent._settle` |
+| Node | What it does |
+|---|---|
+| discover | Runs Bandit over the `[scan]` scope and parses the alerts |
+| triage | Checks `max_steps`, then the budget, then makes one model call and writes `model_call` |
+| tools | Sends each tool request to the dispatcher in order; `submit` is checked here too |
+| nudge | Appends a user message asking the model to call a tool or submit |
+| settle | Writes the alert's one `state_change` and its report row |
 
 Each edge writes a `routing` event, and its `by` field says who made the decision:
 
@@ -111,7 +107,7 @@ into the next one.
 
 ## A5. Tools
 
-All model tools go through the dispatcher (`src/vulnagent/dispatcher.py`). It parses the
+All model tools go through the dispatcher. It parses the
 arguments as JSON, checks that the tool exists, validates the arguments against the tool's
 JSON Schema (the same schema I send to the model), runs the tool, and writes the
 `tool_request` / `tool_result` pair. Any problem goes back to the model as an observation
@@ -179,8 +175,8 @@ row (with its `state_change`) to every alert that does not have a row yet, and t
 `finally` block writes the terminal event and `report.json`. I create the agent object
 before running Bandit, so if copying the workspace fails, every alert Bandit found still
 gets a row. `report.json` is first written to a `.tmp` file and then renamed, so a crash in
-the middle of writing cannot leave half a file. `tests/test_cli.py` tests a crash on the
-third model call and a failed Bandit run.
+the middle of writing cannot leave half a file. My tests cover both a crash on the third
+model call and a failed Bandit run.
 
 The budget charge is `input + output` exactly as the provider reports them in `usage`,
 summed over every `model_call`. `cache_read` and `cache_write` are recorded but not
@@ -233,8 +229,7 @@ ended with an exception, so the next alert can see its own file. The run-level h
 not need to be undone, because the original `--input` is never changed and the copy is
 deleted at the end.
 
-`tests/test_workspace.py` and `tests/test_tools.py` check that `.git`, the answer key and
-`results/` are not in the copy, that `..`, absolute paths and a symlink to `/etc` are
+My tests check that `.git`, the answer key and `results/` are not in the copy, that `..`, absolute paths and a symlink to `/etc` are
 refused, that only the case's two files are visible during an alert, that `search` cannot
 find code that only exists in the sibling file, and that the files come back after the
 alert, also after a simulated crash.
@@ -242,8 +237,7 @@ alert, also after a simulated crash.
 ## C2. Results
 
 The final runs use `configs/full.toml` and `configs/low.toml` with each target's `[scan]`
-block swapped in by `scripts/make_configs.py`, and each run folder also has the
-`config.toml` it used. The settings are `gpt-6-luna`, prompt v2,
+block swapped in, and each run folder also has the `config.toml` it used. The settings are `gpt-6-luna`, prompt v2,
 `reasoning_effort = "low"`, `output_allowance = 4000`, `max_steps = 500`, and `max_tokens`
 800,000 for full and 60,000 for low.
 
@@ -256,12 +250,12 @@ block swapped in by `scripts/make_configs.py`, and each run folder also has the
 | owasp-full | completed | 95,257 | 8 | 10 | 0 |
 | owasp-low | budget_exhausted | 55,878 | 3 | 9 | 6 |
 
-All six pass `scripts/check_run.py`, which checks the trace schema, the six invariants, the
+All six pass my checker, which checks the trace schema, the six invariants, the
 report schema, the row count and order, and that `used_tokens` equals the trace sum.
 
 ### OWASP precision and recall
 
-I scored the OWASP runs with `scripts/evaluate.py` against `expectedresults-0.1.csv` (18
+I scored the OWASP runs against `expectedresults-0.1.csv` (18
 alerts, 8 of them real vulnerabilities in the key). The final run `runs/owasp-full` got
 TP 7, FP 1, TN 9, FN 1, which is precision 0.88, recall 0.88 and accuracy 0.89. The two
 mistakes were BenchmarkTest00017 B317, where the model agreed that external entities are
