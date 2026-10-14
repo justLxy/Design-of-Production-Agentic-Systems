@@ -1,9 +1,16 @@
-# vulnagent
+# Design of Production Agentic Systems
 
-My HW1 agent for COMS E6998-019. It runs Bandit (MEDIUM severity and up) on a pinned
-Python repository and then uses `gpt-6-luna` to label every alert 1 (potential
-vulnerability) or 0 (not a vulnerability), with a rationale and line evidence. Each run
-writes `report.json` and `trace.jsonl`. The design and results are in
+## Intro
+
+`vulnagent` is an LLM agent that triages the output of a static security scanner. It runs
+Bandit on a Python codebase, then investigates each alert the way a reviewer would, by
+reading the surrounding code and following where the data comes from, and decides whether
+the alert is a real potential vulnerability or a false positive. Every decision comes with
+a short explanation and the lines of code it is based on.
+
+The agent is built to stay inside clear limits. It only reads a sandboxed copy of the
+code, never runs or edits it, works within a fixed token budget, and records every step it
+takes so a run can be checked afterwards. The design and the results are in
 [REPORT.md](REPORT.md).
 
 ## Setup
