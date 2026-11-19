@@ -1,0 +1,20 @@
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only: [/bin, /usr, /lib, /lib64, /etc, /proc, /dev/urandom, /app,
+              /target/testcode, /target/helpers, /target/app.py]
+  read_write: [/sandbox, /tmp, /dev/null]
+landlock:
+  compatibility: hard_requirement
+network_policies:
+  model_provider:
+    endpoints:
+      # The Mac's llama-swap at 127.0.0.1:8080, seen from the Colima VM. Not host.docker.internal:
+      # OpenShell 0.1.4 refuses that reserved alias at policy DNS unless the host gateway is
+      # link-local, and Colima's is 192.168.5.2. An IP literal is rejected for protocol tcp.
+      # tcp: no request inspection, so no enforcement or access key (0.1.4 rejects them here).
+      - host: host.lima.internal
+        port: 8080
+        protocol: tcp
+    binaries:
+      - path: /usr/local/bin/python3.12

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "analysis": {
+      "command": "/app/agent/.venv/bin/python",
+      "args": ["-m", "your_server"],
+      "env": {"SYSTEM_PYTHON": "/usr/local/bin/python3.12"}
+    }
+  }
+}

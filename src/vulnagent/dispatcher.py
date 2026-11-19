@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import jsonschema
 
 from vulnagent import tools
+from vulnagent.prompts import SYSTEM_PROMPT
 from vulnagent.trace import Trace
 from vulnagent.workspace import Workspace
 
@@ -180,3 +181,28 @@ class Dispatcher:
     def _refuse(self, alert_id: str, call_id: str, name: str, reason: str) -> Observation:
         self.trace.tool_result(alert_id, name, ok=False, error=reason)
         return Observation(call_id, name, False, f"REFUSED: {reason}")
+
+class LocalToolbox:
+    """HW1's in-process tools behind the toolbox interface the agent loop uses."""
+
+    via = None
+    system_prompt = SYSTEM_PROMPT
+
+    def __init__(self, ws: Workspace, trace: Trace):
+        self.ws = ws
+        self.dispatcher = Dispatcher(ws, trace)
+
+    def specs(self) -> list[dict]:
+        return Dispatcher.specs()
+
+    def dispatch(self, alert_id: str, call_id: str, name: str, raw_args: str) -> Observation:
+        return self.dispatcher.dispatch(alert_id, call_id, name, raw_args)
+
+    def decline(self, alert_id: str, call_id: str, name: str, raw_args: str, reason: str) -> Observation:
+        return self.dispatcher.decline(alert_id, call_id, name, raw_args, reason)
+
+    def open_alert(self, alert: dict):
+        return self.ws.investigating(alert["path"])
+
+    def close(self) -> None:
+        pass

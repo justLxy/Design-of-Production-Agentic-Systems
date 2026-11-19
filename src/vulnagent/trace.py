@@ -19,6 +19,7 @@ class EventKind(StrEnum):
     ROUTING = "routing"
     STATE_CHANGE = "state_change"
     TERMINAL = "terminal"
+    DISCOVERY = "discovery"
 
 
 class TerminalStatus(StrEnum):
@@ -79,8 +80,8 @@ class Trace:
             self._usage_total[key] = self._usage_total.get(key, 0) + value
         return event
 
-    def tool_request(self, alert_id: str | None, tool: str, args: dict) -> dict:
-        return self.emit(EventKind.TOOL_REQUEST, alert_id, tool=tool, args=args)
+    def tool_request(self, alert_id: str | None, tool: str, args: dict, **extra) -> dict:
+        return self.emit(EventKind.TOOL_REQUEST, alert_id, tool=tool, args=args, **extra)
 
     def tool_result(self, alert_id: str | None, tool: str, ok: bool,
                     error: str | None = None, **extra) -> dict:
@@ -88,6 +89,10 @@ class Trace:
         if not ok:
             fields["error"] = error or "unknown error"
         return self.emit(EventKind.TOOL_RESULT, alert_id, **fields)
+
+    def discovery(self, server: str, tools: list[str]) -> dict:
+        """The MCP host's tools/list result: the tool names offered to the model."""
+        return self.emit(EventKind.DISCOVERY, None, server=server, tools=tools)
 
     def routing(self, alert_id: str | None, decision: str, by: str, **extra) -> dict:
         return self.emit(EventKind.ROUTING, alert_id, decision=decision, by=by, **extra)

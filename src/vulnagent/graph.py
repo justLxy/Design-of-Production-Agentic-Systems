@@ -11,11 +11,9 @@ from pathlib import Path
 import openai
 
 from vulnagent.budget import Budget
-from vulnagent.dispatcher import Dispatcher
 from vulnagent.llm import ModelClient, ModelReply, ToolCall
-from vulnagent.prompts import NUDGE, SYSTEM_PROMPT, alert_prompt
+from vulnagent.prompts import NUDGE, alert_prompt
 from vulnagent.trace import TerminalStatus, Trace
-from vulnagent.workspace import Workspace
 
 NO_PROGRESS_LIMIT = 3
 ROLE = "classifier"
@@ -41,14 +39,14 @@ class AlertState:
     counted_items: int = 0
 
 class Agent:
-    def __init__(self, cfg: dict, ws: Workspace, trace: Trace, client: ModelClient):
-        self.ws = ws
+    def __init__(self, cfg: dict, toolbox, trace: Trace, client: ModelClient):
+        # toolbox: LocalToolbox (HW1, in process), McpToolbox or CodeActToolbox
+        self.toolbox = toolbox
         self.trace = trace
         self.client = client
         self.max_steps = cfg["budget"]["max_steps"]
         self.budget = Budget(cfg["budget"]["max_tokens"], cfg["budget"]["output_allowance"], trace)
-        self.dispatcher = Dispatcher(ws, trace)
-        self.tools = Dispatcher.specs()
+        self.tools = toolbox.specs()
         self.alerts: list[dict] = []
         self.rows: dict[str, dict] = {}  # alert_id -> settled report row
         self.steps = 0  # model calls + tool executions, for max_steps
@@ -82,10 +80,10 @@ class Agent:
         aid = alert["alert_id"]
         self.trace.routing(aid, "triage", by="runtime")
         s = AlertState(alert, items=[
-            {"role": "developer", "content": SYSTEM_PROMPT},
+            {"role": "developer", "content": self.toolbox.system_prompt},
             {"role": "user", "content": alert_prompt(alert)},
         ])
-        with self.ws.investigating(alert["path"]):
+        with self.toolbox.open_alert(alert):
             while aid not in self.rows:
                 reply = self._triage(s)
                 if reply is not None:
@@ -140,12 +138,12 @@ class Agent:
         progressed = False
         for i, call in enumerate(calls):
             self.steps += 1
-            obs = self.dispatcher.dispatch(aid, call.id, call.name, call.arguments)
+            obs = self.toolbox.dispatch(aid, call.id, call.name, call.arguments)
             s.items.append(obs.as_item())
             if call.name == "submit" and obs.ok:
                 # Calls after an accepted submit are not run, but each one is still recorded.
                 for rest in calls[i + 1:]:
-                    self.dispatcher.decline(aid, rest.id, rest.name, rest.arguments,
+                    self.toolbox.decline(aid, rest.id, rest.name, rest.arguments,
                                             "not run: this alert was already submitted")
                 args = json.loads(call.arguments)
                 self._settle(s.alert, "submit", "classified", args["label"],
@@ -184,7 +182,14 @@ class Agent:
             "evidence": [{"path": Path(e["path"]).as_posix(),
                           "start_line": e["start_line"], "end_line": e["end_line"]}
                          for e in evidence],
+            "remediation": skipped_remediation(),
         }
+
+
+def skipped_remediation() -> dict:
+    """The remediation object for an alert that got no patch."""
+    return {"status": "skipped", "diff": "",
+            "checks": {"applies": None, "touches_flagged_line": None, "clean_rescan": None}}
 
 
 def _call_key(call: ToolCall) -> str:

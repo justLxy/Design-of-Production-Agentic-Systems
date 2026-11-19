@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "vulnagent": {
+      "command": "/usr/local/bin/python3.12",
+      "args": ["-m", "vulnagent.server"],
+      "env": {
+        "SYSTEM_PYTHON": "/usr/local/bin/python3.12",
+        "VULNAGENT_TARGET_ROOT": "/target",
+        "VULNAGENT_TARGET_ENTRIES": "testcode:helpers:app.py:radicale:python:scripts",
+        "VULNAGENT_WORKDIR": "/sandbox/work/mcp-server"
+      }
+    }
+  }
+}

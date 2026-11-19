@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/comse6998-019/hw1-agent-architectures/report.schema.json",
-  "title": "HW1 report.json",
-  "description": "One row per in-scope Bandit alert. Rules the schema cannot express, and graders check: len(alerts) == scan.alert_count; rows ordered by plain string comparison of path, then line as an integer, then test_id; budget.used_tokens is exactly the budget charge: input + output as the provider reported them, summed over every model_call event in trace.jsonl; cache_read and cache_write are recorded when reported and never charged. path and every evidence path are repository-relative POSIX paths with no leading ./ (strip the ./ Bandit prints for explicitly listed files). Extra fields are allowed.",
+  "$id": "https://github.com/comse6998-019/hw2-tool-boundary/report.schema.json",
+  "title": "HW2 report.json",
+  "description": "One row per in-scope Bandit alert. Rules the schema cannot express, and graders check: len(alerts) == scan.alert_count; rows ordered by plain string comparison of path, then line as an integer, then test_id; budget.used_tokens is exactly the budget charge: input + output as the provider reported them, summed over every model_call event in trace.jsonl; cache_read and cache_write are recorded when reported and never charged. path and every evidence path are repository-relative POSIX paths with no leading ./ (strip the ./ Bandit prints for explicitly listed files). Extra fields are allowed. remediation.status is skipped for every alert labelled 0 or unsettled.",
   "type": "object",
   "required": ["target", "scan", "budget", "alerts"],
   "properties": {
@@ -44,10 +44,41 @@
         "end_line": {"type": "integer", "minimum": 1}
       }
     },
+    "remediation": {
+      "type": "object",
+      "required": ["status", "diff", "checks"],
+      "properties": {
+        "status": {"enum": ["accepted", "rejected", "skipped"]},
+        "diff": {"type": "string"},
+        "checks": {
+          "type": "object",
+          "required": ["applies", "touches_flagged_line", "clean_rescan"],
+          "properties": {
+            "applies": {"type": ["boolean", "null"]},
+            "touches_flagged_line": {"type": ["boolean", "null"]},
+            "clean_rescan": {"type": ["boolean", "null"]}
+          },
+          "additionalProperties": false
+        }
+      },
+      "if": {"properties": {"status": {"const": "accepted"}}},
+      "then": {
+        "properties": {
+          "diff": {"minLength": 1},
+          "checks": {
+            "properties": {
+              "applies": {"const": true},
+              "touches_flagged_line": {"const": true},
+              "clean_rescan": {"const": true}
+            }
+          }
+        }
+      }
+    },
     "alert": {
       "type": "object",
       "required": ["alert_id", "test_id", "path", "line", "severity", "confidence",
-                   "label", "status", "rationale", "evidence"],
+                   "label", "status", "rationale", "evidence", "remediation"],
       "properties": {
         "alert_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
         "test_id": {"type": "string", "pattern": "^B[0-9]{3}$"},
@@ -58,7 +89,8 @@
         "label": {"enum": [0, 1, null]},
         "status": {"enum": ["classified", "budget_exhausted", "error"]},
         "rationale": {"type": "string"},
-        "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}}
+        "evidence": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+        "remediation": {"$ref": "#/$defs/remediation"}
       },
       "if": {"properties": {"status": {"const": "classified"}}},
       "then": {

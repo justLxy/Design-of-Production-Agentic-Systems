@@ -32,6 +32,15 @@ name = "fake"
 max_tokens = {max_tokens}
 output_allowance = 1000
 max_steps = 500
+
+[agent]
+kind = "mcp"
+
+[mcp]
+config = "mcp.json"
+
+[sandbox]
+policy = "policy.yaml"
 """
 
 
@@ -83,6 +92,8 @@ def test_a_full_run_writes_a_valid_report(tmp_path, monkeypatch):
     assert {r["status"] for r in report["alerts"]} == {"classified"}
     assert report["target"]["commit"] == "f1291485808b66e20ddb6b01b10dc71b3df8c8ba"
     assert events[-1]["status"] == "completed"
+    assert [e["kind"] for e in events].count("discovery") == 1
+    assert all(e["via"] == "mcp" for e in events if e["kind"] in ("tool_request", "tool_result"))
 
 
 def test_a_low_budget_run_shows_the_cutoff(tmp_path, monkeypatch):

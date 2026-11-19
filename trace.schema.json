@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/comse6998-019/hw1-agent-architectures/trace.schema.json",
-  "title": "HW1 trace.jsonl event",
-  "description": "Validates ONE line of trace.jsonl. Every line must validate. Rules across lines are not expressible here and graders check them: step starts at 1 and increases by exactly 1; exactly one terminal event, last; each usage_total counter equals the sum of that counter over all model_call events, and report.json budget.used_tokens equals the sum of input + output over them; every report.json row has exactly one state_change with its alert_id, alert_status and label; every tool_request is immediately followed by its tool_result. Extra fields are allowed on any event, except inside usage and usage_total.",
+  "$id": "https://github.com/comse6998-019/hw2-tool-boundary/trace.schema.json",
+  "title": "HW2 trace.jsonl event",
+  "description": "Validates ONE line of trace.jsonl. Every line must validate. Rules across lines are not expressible here and graders check them: step starts at 1 and increases by exactly 1; exactly one terminal event, last; each usage_total counter equals the sum of that counter over all model_call events, and report.json budget.used_tokens equals the sum of input + output over them; every report.json row has exactly one state_change with its alert_id, alert_status and label; every tool_request is immediately followed by its tool_result. Extra fields are allowed on any event, except inside usage and usage_total. HW2 adds: via records the path a tool call took; refused_by names the place that refused it; discovery is written once by the MCP host after tools/list; a state_change with node remediation carries the three checks and no alert_status or label, so it never counts as the row's one state_change; every HW1 rule still holds.",
   "type": "object",
   "required": ["step", "ts", "run_id", "alert_id", "kind"],
   "properties": {
@@ -13,7 +13,7 @@
       "description": "The alert this event belongs to, or null for a run-level event.",
       "anyOf": [{"type": "string", "pattern": "^[A-Za-z0-9._-]+$"}, {"type": "null"}]
     },
-    "kind": {"enum": ["model_call", "tool_request", "tool_result", "routing", "state_change", "terminal"]}
+    "kind": {"enum": ["model_call", "tool_request", "tool_result", "routing", "state_change", "terminal", "discovery"]}
   },
   "allOf": [
     {
@@ -33,7 +33,8 @@
         "required": ["tool", "args"],
         "properties": {
           "tool": {"type": "string", "minLength": 1},
-          "args": {"type": "object"}
+          "args": {"type": "object"},
+          "via": {"enum": ["mcp", "codeact"]}
         }
       }
     },
@@ -44,7 +45,9 @@
         "properties": {
           "tool": {"type": "string", "minLength": 1},
           "ok": {"type": "boolean"},
-          "error": {"type": "string", "minLength": 1}
+          "error": {"type": "string", "minLength": 1},
+          "via": {"enum": ["mcp", "codeact"]},
+          "refused_by": {"enum": ["dispatcher", "server", "kernel"]}
         },
         "if": {"properties": {"ok": {"const": false}}},
         "then": {"required": ["error"]}
@@ -67,7 +70,8 @@
         "properties": {
           "node": {"type": "string", "minLength": 1},
           "alert_status": {"enum": ["classified", "budget_exhausted", "error"]},
-          "label": {"enum": [0, 1, null]}
+          "label": {"enum": [0, 1, null]},
+          "checks": {"$ref": "#/$defs/checks"}
         },
         "dependentRequired": {"alert_status": ["label"], "label": ["alert_status"]},
         "allOf": [
@@ -95,6 +99,16 @@
           "usage_total": {"$ref": "#/$defs/usage"}
         }
       }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "discovery"}}},
+      "then": {
+        "required": ["server", "tools"],
+        "properties": {
+          "server": {"type": "string", "minLength": 1},
+          "tools": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
     }
   ],
   "$defs": {
@@ -107,6 +121,16 @@
         "output": {"type": "integer", "minimum": 0},
         "cache_read": {"type": "integer", "minimum": 0},
         "cache_write": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "object",
+      "required": ["applies", "touches_flagged_line", "clean_rescan"],
+      "properties": {
+        "applies": {"type": ["boolean", "null"]},
+        "touches_flagged_line": {"type": ["boolean", "null"]},
+        "clean_rescan": {"type": ["boolean", "null"]}
       },
       "additionalProperties": false
     }

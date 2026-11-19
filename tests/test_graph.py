@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from vulnagent.dispatcher import LocalToolbox
 from vulnagent.graph import Agent
 from vulnagent.llm import ModelReply, ToolCall
 from vulnagent.trace import TerminalStatus, Trace
@@ -72,7 +73,7 @@ def run(tmp_path, replies, alerts=(A11, A12), max_tokens=1_000_000, max_steps=10
     trace = Trace(trace_path, "test-run")
     model = ScriptedModel(replies)
     with Workspace(OWASP) as ws:
-        agent = Agent(cfg, ws, trace, model)
+        agent = Agent(cfg, LocalToolbox(ws, trace), trace, model)
         status = agent.run(list(alerts))
     trace.terminal(status)
 

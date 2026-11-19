@@ -13,7 +13,8 @@ from vulnagent.graph import Agent
 from vulnagent.llm import ModelClient
 from vulnagent.report import build_report, summary, target_commit, write_report
 from vulnagent.trace import TerminalStatus, Trace
-from vulnagent.workspace import Workspace
+from vulnagent.config import REPO_ROOT
+from vulnagent.mcp_host import McpToolbox
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,19 +27,27 @@ def parse_args() -> argparse.Namespace:
 
 
 def discover(input_dir: Path, scan: dict, trace: Trace) -> list[dict]:
-    """Discovery: run Bandit over the [scan] scope, recorded as one tool_request/tool_result pair."""
-    trace.tool_request(None, "bandit", {
-        "paths": scan["paths"],
-        "exclude": scan["exclude"],
-        "min_severity": scan["min_severity"],
-    })
+    """Discovery: run Bandit over the [scan] scope.
+
+    The runtime runs Bandit itself, not through the dispatcher, so it is recorded
+    as a state_change rather than a tool_request/tool_result pair (those carry via).
+    """
+    args = {"paths": scan["paths"], "exclude": scan["exclude"], "min_severity": scan["min_severity"]}
     try:
         alerts = run_bandit(input_dir, scan)
     except BaseException as e:
-        trace.tool_result(None, "bandit", ok=False, error=f"{type(e).__name__}: {e}")
+        trace.state_change(None, "discover", tool="bandit", args=args, ok=False, error=f"{type(e).__name__}: {e}")
         raise
-    trace.tool_result(None, "bandit", ok=True, alerts=len(alerts))
+    trace.state_change(None, "discover", tool="bandit", args=args, ok=True, alerts=len(alerts))
     return alerts
+
+
+def make_toolbox(cfg: dict, input_dir: Path, trace: Trace):
+    """The agent's tools for [agent] kind."""
+    kind = cfg["agent"]["kind"]
+    if kind == "mcp":
+        return McpToolbox(REPO_ROOT / cfg["mcp"]["config"], input_dir, trace)
+    raise NotImplementedError(f"agent kind {kind!r} is not implemented yet")
 
 
 def main() -> None:
@@ -53,27 +62,31 @@ def main() -> None:
     trace = Trace(args.output / "trace.jsonl", f"{args.input.resolve().name}-{int(time.time())}")
 
     agent: Agent | None = None
+    toolbox = None
     alerts: list[dict] = []
     status = TerminalStatus.CRASHED  # replaced only if agent.run() returns
     try:
         model = cfg["model"]
         client = ModelClient(model["provider"], model["name"], cfg["budget"]["output_allowance"],
                              model.get("reasoning_effort"))
+        toolbox = make_toolbox(cfg, args.input, trace)
         # create the agent before Bandit runs, so a later crash can still settle every alert
-        agent = Agent(cfg, Workspace(args.input), trace, client)
+        agent = Agent(cfg, toolbox, trace, client)
         alerts = agent.alerts = discover(args.input, cfg["scan"], trace)
-        with agent.ws:
-            status = agent.run(alerts)
+        status = agent.run(alerts)
     except BaseException as e:
         if agent is not None:
             agent.settle_remaining("error", f"Not classified: the run crashed ({type(e).__name__}: {e}).",
                                    node="crash")
         raise
     finally:
+        if toolbox is not None:
+            toolbox.close()
         # always write the terminal event and report.json, also after a crash
         trace.terminal(status)
+        commit = cfg.get("target", {}).get("commit") or target_commit(args.input)
         report = build_report(
-            str(args.input), target_commit(args.input), cfg["scan"], alerts,
+            str(args.input), commit, cfg["scan"], alerts,
             agent.rows if agent is not None else {},
             cfg["budget"]["max_tokens"], trace.used_tokens,
             agent.budget.exhausted if agent is not None else False,

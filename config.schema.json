@@ -1,13 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/comse6998-019/hw1-agent-architectures/config.schema.json",
-  "title": "HW1 config.toml",
+  "$id": "https://github.com/comse6998-019/hw2-tool-boundary/config.schema.json",
+  "title": "HW2 config.toml",
   "description": "Validates the config file your agent reads (--config), parsed from TOML to JSON. [scan] must equal one of the three staff blocks in briefs/scan/ exactly. [model] and [budget] have required keys; you may add other keys and tables for your own settings. Never put secrets in this file.",
   "type": "object",
   "required": [
     "scan",
     "model",
-    "budget"
+    "budget",
+    "agent",
+    "mcp",
+    "sandbox"
   ],
   "properties": {
     "scan": {
@@ -83,6 +86,47 @@
           "type": "integer",
           "minimum": 1,
           "description": "Failsafe on steps, separate from the token budget."
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "codeact",
+            "mcp"
+          ],
+          "description": "Which of your two agents this run uses."
+        }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "required": [
+        "config"
+      ],
+      "properties": {
+        "config": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path, relative to the repository root, of the mcp.json the agent and the staff driver start your server from."
+        }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "required": [
+        "policy"
+      ],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path, relative to the repository root, of the OpenShell policy both agents run under."
         }
       }
     }
