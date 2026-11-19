@@ -1,0 +1,584 @@
+{
+  "target": {
+    "input": "/sandbox/work/target",
+    "commit": "f1291485808b66e20ddb6b01b10dc71b3df8c8ba"
+  },
+  "scan": {
+    "bandit_version": "1.9.4",
+    "min_severity": "MEDIUM",
+    "alert_count": 18
+  },
+  "budget": {
+    "max_tokens": 3000000,
+    "used_tokens": 774808,
+    "exhausted": false
+  },
+  "alerts": [
+    {
+      "alert_id": "testcode-BenchmarkTest00011-py-47-B608",
+      "test_id": "B608",
+      "path": "testcode/BenchmarkTest00011.py",
+      "line": 47,
+      "severity": "MEDIUM",
+      "confidence": "LOW",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The SQL at line 47 is a constant query containing a `?` placeholder, and line 50 passes `bar` separately as a parameter to `cur.execute`, rather than interpolating it into the SQL string.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00011.py",
+          "start_line": 47,
+          "end_line": 50
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00012-py-48-B608",
+      "test_id": "B608",
+      "path": "testcode/BenchmarkTest00012.py",
+      "line": 48,
+      "severity": "MEDIUM",
+      "confidence": "LOW",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The query at line 48 is a constant SQL statement containing a `?` placeholder, and line 51 supplies the attacker-influenced `bar` only as a separate SQLite parameter, so it cannot alter the query structure. The cookie-derived value at lines 39\u201344 reaches that parameter, but is not interpolated into the SQL string.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00012.py",
+          "start_line": 38,
+          "end_line": 53
+        },
+        {
+          "path": "helpers/db_sqlite.py",
+          "start_line": 30,
+          "end_line": 49
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00013-py-55-B314",
+      "test_id": "B314",
+      "path": "testcode/BenchmarkTest00013.py",
+      "line": 55,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "ET.parse reads the fixed application resource employees.xml, not XML supplied by the request; request-controlled cookie data is used in the XPath query only after parsing. Thus the flagged XML parser has no untrusted XML input in this handler (lines 39, 55\u201357).",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00013.py",
+          "start_line": 38,
+          "end_line": 57
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00014-py-56-B314",
+      "test_id": "B314",
+      "path": "testcode/BenchmarkTest00014.py",
+      "line": 56,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The parser reads a fixed bundled `employees.xml` path under `helpers.utils.RES_DIR`, which is the constant `./helpers/resources` (lines 56 and utils line 3); request-derived `bar` is used only afterward in the XPath expression, not as XML input. Thus attacker-controlled data cannot reach the XML parser, so this B314 alert does not represent an exploitable untrusted-XML parse.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00014.py",
+          "start_line": 38,
+          "end_line": 58
+        },
+        {
+          "path": "helpers/utils.py",
+          "start_line": 1,
+          "end_line": 4
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00015-py-56-B314",
+      "test_id": "B314",
+      "path": "testcode/BenchmarkTest00015.py",
+      "line": 56,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The parser always reads the fixed `helpers.utils.RES_DIR/employees.xml` path (line 56); `RES_DIR` is a constant (`helpers/utils.py:3`) and that file contains only static employee records (lines 1\u201327), not request-supplied XML. The request cookie is used later in the XPath query, not as input to `ET.parse`, so the flagged unsafe-XML condition is not exposed to attacker-controlled XML here.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00015.py",
+          "start_line": 38,
+          "end_line": 58
+        },
+        {
+          "path": "helpers/utils.py",
+          "start_line": 1,
+          "end_line": 4
+        },
+        {
+          "path": "helpers/resources/employees.xml",
+          "start_line": 1,
+          "end_line": 27
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00016-py-58-B314",
+      "test_id": "B314",
+      "path": "testcode/BenchmarkTest00016.py",
+      "line": 58,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The flagged `ET.parse` reads the fixed `helpers.utils.RES_DIR` (`'./helpers/resources'`) employee XML file, not XML supplied by the request; the cookie-derived value is used later in the XPath query, not in the parse input (lines 39, 58\u201360). Thus untrusted XML cannot reach this parser through this code.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00016.py",
+          "start_line": 38,
+          "end_line": 60
+        },
+        {
+          "path": "helpers/utils.py",
+          "start_line": 1,
+          "end_line": 4
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00017-py-49-B317",
+      "test_id": "B317",
+      "path": "testcode/BenchmarkTest00017.py",
+      "line": 49,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route reads the `BenchmarkTest00017` cookie from the Flask request and URL-decodes it at lines 38\u201339, then assigns that attacker-controlled value to `bar` at line 43. The default SAX parser is created at line 49 and used to parse `bar` at line 52 without any defusedxml protection, so untrusted XML reaches the flagged parser.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00017.py",
+          "start_line": 34,
+          "end_line": 43
+        },
+        {
+          "path": "testcode/BenchmarkTest00017.py",
+          "start_line": 45,
+          "end_line": 52
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00017.py\n+++ b/testcode/BenchmarkTest00017.py\n@@ -44,9 +44,10 @@\n \n \t\timport xml.dom.minidom\n \t\timport xml.sax.handler\n+\t\timport defusedxml.sax\n \n \t\ttry:\n-\t\t\tparser = xml.sax.make_parser()\n+\t\t\tparser = defusedxml.sax.make_parser()\n \t\t\t# all features are disabled by default\n \n \t\t\tdoc = xml.dom.minidom.parseString(bar, parser)\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00017-py-52-B318",
+      "test_id": "B318",
+      "path": "testcode/BenchmarkTest00017.py",
+      "line": 52,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST handler takes the cookie value from `request.cookies` and assigns it to `bar` at lines 39\u201343, so an attacker can supply XML directly to `minidom.parseString` at line 52. The parser is a standard SAX parser with no effective defusing shown; the comment that features are disabled by default does not sanitize or validate the supplied XML.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00017.py",
+          "start_line": 38,
+          "end_line": 52
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00017.py\n+++ b/testcode/BenchmarkTest00017.py\n@@ -42,14 +42,14 @@\n \t\tif 'should' in bar:\n \t\t\tbar = param\n \n-\t\timport xml.dom.minidom\n+\t\timport defusedxml.minidom\n \t\timport xml.sax.handler\n \n \t\ttry:\n \t\t\tparser = xml.sax.make_parser()\n \t\t\t# all features are disabled by default\n \n-\t\t\tdoc = xml.dom.minidom.parseString(bar, parser)\n+\t\t\tdoc = defusedxml.minidom.parseString(bar)\n \n \t\t\tout = ''\n \t\t\tprocessing = [doc.documentElement]\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00054-py-64-B324",
+      "test_id": "B324",
+      "path": "testcode/BenchmarkTest00054.py",
+      "line": 64,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route is an entrypoint, and its cookie value flows through `param` into `bar`/`input` before being hashed with MD5 at lines 39\u201365. The resulting digest is stored at lines 67\u201369, so attacker-controlled data reaches a weak hash primitive in a security-relevant credential/password-file context.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00054.py",
+          "start_line": 23,
+          "end_line": 39
+        },
+        {
+          "path": "testcode/BenchmarkTest00054.py",
+          "start_line": 41,
+          "end_line": 69
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00054.py\n+++ b/testcode/BenchmarkTest00054.py\n@@ -61,7 +61,7 @@\n \t\t\t)\n \t\t\treturn RESPONSE\n \n-\t\thash = hashlib.new('md5')\n+\t\thash = hashlib.new('sha256')\n \t\thash.update(input)\n \n \t\tresult = hash.digest()\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00057-py-65-B324",
+      "test_id": "B324",
+      "path": "testcode/BenchmarkTest00057.py",
+      "line": 65,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route reads a client-controlled cookie, URL-decodes it, and assigns it to `bar`; that value is encoded/read as `input` and passed to `hash.update`. The MD5 digest is persisted as a hash value, so the weak hash is used on attacker-influenced data in the flagged operation (lines 39\u201357 and 65\u201370).",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00057.py",
+          "start_line": 34,
+          "end_line": 48
+        },
+        {
+          "path": "testcode/BenchmarkTest00057.py",
+          "start_line": 53,
+          "end_line": 70
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00057.py\n+++ b/testcode/BenchmarkTest00057.py\n@@ -62,7 +62,7 @@\n \t\t\t)\n \t\t\treturn RESPONSE\n \n-\t\thash = hashlib.md5()\n+\t\thash = hashlib.sha256()\n \t\thash.update(input)\n \n \t\tresult = hash.digest()\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00058-py-65-B324",
+      "test_id": "B324",
+      "path": "testcode/BenchmarkTest00058.py",
+      "line": 65,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "Although the POST handler is externally reachable and reads a cookie at line 39, it stores that value under `keyB-69840` and then assigns `bar` from the fixed `keyA-69840` value (`a_Value`) at lines 47\u201348. Consequently the SHA-1 at line 65 hashes only that constant, not attacker-controlled data, and is not being used for a security decision.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00058.py",
+          "start_line": 35,
+          "end_line": 48
+        },
+        {
+          "path": "testcode/BenchmarkTest00058.py",
+          "start_line": 53,
+          "end_line": 70
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00059-py-63-B324",
+      "test_id": "B324",
+      "path": "testcode/BenchmarkTest00059.py",
+      "line": 63,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route is externally reachable, and it derives the SHA-1 input from the request cookie (lines 34\u201339, then 46 and 51\u201364). The digest is persisted as a password-file hash at lines 66\u201368, so this is not merely a non-security checksum; SHA-1 is unsuitable for password/security hashing.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00059.py",
+          "start_line": 34,
+          "end_line": 39
+        },
+        {
+          "path": "testcode/BenchmarkTest00059.py",
+          "start_line": 43,
+          "end_line": 68
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00059.py\n+++ b/testcode/BenchmarkTest00059.py\n@@ -60,7 +60,7 @@\n \t\t\t)\n \t\t\treturn RESPONSE\n \n-\t\thash = hashlib.sha1()\n+\t\thash = hashlib.sha256()\n \t\thash.update(input)\n \n \t\tresult = hash.digest()\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00060-py-60-B324",
+      "test_id": "B324",
+      "path": "testcode/BenchmarkTest00060.py",
+      "line": 60,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route hashes a value taken from the request cookie (lines 34\u201343 and 48\u201352) with SHA-1, then persists the digest in a password-named file (lines 60\u201365). Since this is storing a hash of a sensitive value for security-relevant use, SHA-1's collision weakness makes the flagged primitive unsafe.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00060.py",
+          "start_line": 34,
+          "end_line": 43
+        },
+        {
+          "path": "testcode/BenchmarkTest00060.py",
+          "start_line": 48,
+          "end_line": 65
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00060.py\n+++ b/testcode/BenchmarkTest00060.py\n@@ -57,7 +57,7 @@\n \t\t\t)\n \t\t\treturn RESPONSE\n \n-\t\thash = hashlib.sha1()\n+\t\thash = hashlib.sha256()\n \t\thash.update(input)\n \n \t\tresult = hash.digest()\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00073-py-54-B307",
+      "test_id": "B307",
+      "path": "testcode/BenchmarkTest00073.py",
+      "line": 54,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST handler takes a cookie from Flask's request, URL-decodes it, and incorporates it into `bar` before calling `eval` (lines 38\u201344, 54). The check only constrains quote placement and does not make arbitrary Python expressions safe; attacker-controlled cookie content can form an evaluable expression, so this is a potential code-injection vulnerability.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00073.py",
+          "start_line": 38,
+          "end_line": 46
+        },
+        {
+          "path": "testcode/BenchmarkTest00073.py",
+          "start_line": 52,
+          "end_line": 59
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00073.py\n+++ b/testcode/BenchmarkTest00073.py\n@@ -15,6 +15,7 @@\n   Created: 2025\n '''\n \n+import ast\n from flask import redirect, url_for, request, make_response, render_template\n from helpers.utils import escape_for_html\n \n@@ -51,7 +52,7 @@\n \n \t\ttry:\n \t\t\tRESPONSE += (\n-\t\t\t\teval(bar)\n+\t\t\t\tast.literal_eval(bar)\n \t\t\t)\n \t\texcept:\n \t\t\tRESPONSE += (\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00074-py-51-B102",
+      "test_id": "B102",
+      "path": "testcode/BenchmarkTest00074.py",
+      "line": 51,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST handler reads the attacker-controlled cookie at line 39, URL-decodes it, stores it in the configuration at line 47, retrieves it as `bar` at line 48, and passes it directly to `exec` at line 51. An attacker can therefore supply Python code for execution; the broad exception handler does not prevent execution.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00074.py",
+          "start_line": 34,
+          "end_line": 52
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00074.py\n+++ b/testcode/BenchmarkTest00074.py\n@@ -48,7 +48,7 @@\n \t\tbar = conf90091.get('section90091', 'keyB-90091')\n \n \t\ttry:\n-\t\t\texec(bar)\n+\t\t\tRESPONSE += bar\n \t\texcept:\n \t\t\tRESPONSE += (\n \t\t\t\tf'Error executing statement \\'{escape_for_html(bar)}\\''\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00075-py-53-B102",
+      "test_id": "B102",
+      "path": "testcode/BenchmarkTest00075.py",
+      "line": 53,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route obtains the cookie from the request, URL-decodes it, and passes it unchanged through Thing2.doSomething; its only check requires surrounding quotes and forbids interior quotes, which still allows attacker-controlled Python string-literal content. `exec(bar)` therefore executes attacker-influenced source (not merely a safely parsed literal), making this a potential code-injection vulnerability.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00075.py",
+          "start_line": 34,
+          "end_line": 53
+        },
+        {
+          "path": "helpers/ThingFactory.py",
+          "start_line": 5,
+          "end_line": 21
+        },
+        {
+          "path": "helpers/resources/ThingFactory.ini",
+          "start_line": 1,
+          "end_line": 2
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00075.py\n+++ b/testcode/BenchmarkTest00075.py\n@@ -50,7 +50,7 @@\n \t\t\treturn RESPONSE\n \n \t\ttry:\n-\t\t\texec(bar)\n+\t\t\tbar = bar[1:-1]\n \t\texcept:\n \t\t\tRESPONSE += (\n \t\t\t\tf'Error executing statement \\'{escape_for_html(bar)}\\''\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00078-py-53-B301",
+      "test_id": "B301",
+      "path": "testcode/BenchmarkTest00078.py",
+      "line": 53,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST handler reads the cookie from Flask's request at line 39, incorporates it into `bar` at lines 42\u201344, and passes its base64-decoded bytes to `pickle.loads` at line 53. The hard-coded cookie set by the GET handler does not make the POST cookie trusted: clients can supply or alter cookie values, so attacker-controlled pickle data reaches unsafe deserialization.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00078.py",
+          "start_line": 23,
+          "end_line": 31
+        },
+        {
+          "path": "testcode/BenchmarkTest00078.py",
+          "start_line": 34,
+          "end_line": 53
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00078.py\n+++ b/testcode/BenchmarkTest00078.py\n@@ -43,6 +43,7 @@\n \t\tstring9895 += 'snapes on a plane'\n \t\tbar = string9895[4:-17]\n \n+\t\timport json\n \t\timport pickle\n \t\timport base64\n \t\timport helpers.utils\n@@ -50,7 +51,7 @@\n \t\thelpers.utils.sharedstr = \"no pickles to be seen here\"\n \n \t\ttry:\n-\t\t\tunpickled = pickle.loads(base64.urlsafe_b64decode(bar))\n+\t\t\tunpickled = json.loads(base64.urlsafe_b64decode(bar))\n \t\texcept:\n \t\t\tRESPONSE += (\n \t\t\t\t'Unpickling failed!'\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "testcode-BenchmarkTest00099-py-46-B608",
+      "test_id": "B608",
+      "path": "testcode/BenchmarkTest00099.py",
+      "line": 46,
+      "severity": "MEDIUM",
+      "confidence": "LOW",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The POST route obtains `param` directly from `request.form` (line 31), stores it in the ConfigParser, and retrieves it as `bar` (lines 41\u201342). That value is interpolated into the SQL string at line 46 and executed at line 49 without parameterization, enabling SQL injection.",
+      "evidence": [
+        {
+          "path": "testcode/BenchmarkTest00099.py",
+          "start_line": 27,
+          "end_line": 32
+        },
+        {
+          "path": "testcode/BenchmarkTest00099.py",
+          "start_line": 37,
+          "end_line": 49
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/testcode/BenchmarkTest00099.py\n+++ b/testcode/BenchmarkTest00099.py\n@@ -43,10 +43,10 @@\n \n \t\timport helpers.db_sqlite\n \n-\t\tsql = f'SELECT username from USERS where password = \\'{bar}\\''\n+\t\tsql = 'SELECT username from USERS where password = ?'\n \t\tcon = helpers.db_sqlite.get_connection()\n \t\tcur = con.cursor()\n-\t\tcur.execute(sql)\n+\t\tcur.execute(sql, (bar,))\n \t\tRESPONSE += (\n \t\t\thelpers.db_sqlite.results(cur, sql)\n \t\t)\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    }
+  ]
+}

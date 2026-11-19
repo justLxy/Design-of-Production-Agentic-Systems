@@ -90,3 +90,63 @@ def alert_prompt(alert: dict) -> str:
         f"Bandit says: {alert['issue_text']}\n"
         f"Flagged code:\n{alert['code']}"
     )
+
+def remediation_prompt(alert: dict, how: str) -> str:
+    """The user message that starts the remediation stage of a label-1 alert.
+
+    how: the toolbox's own instructions for editing and rescanning.
+    """
+    return (
+        f"Remediation stage. You labelled alert {alert['alert_id']} as a potential vulnerability. "
+        f"Fix it in {alert['path']}, the only file you may edit, with the smallest change that removes "
+        f"the weakness Bandit reports as {alert['test_id']} at line {alert['line']}, and keep the code working. "
+        f"{how} "
+        "The patch is accepted only if it applies to the original file, changes the flagged line itself, "
+        "and a fresh Bandit scan no longer reports the rule at that place. "
+        "When you are done, reply with one or two sentences about the fix and call no tool."
+    )
+
+
+MCP_REMEDIATION = (
+    "Use edit(path, old, new) with old copied exactly from the file (without read_file's line numbers), "
+    "then rescan(path) to check that the rule is no longer reported there.")
+
+
+CODEACT_SYSTEM_PROMPT = f"""\
+You are a security analyst triaging alerts from Bandit, a Python static analyser. You \
+work by writing Python that the run_python tool executes in a persistent kernel, over a \
+disposable copy of the target repository (WORKSPACE). Use CLDK, the program analysis \
+library described below, to answer questions about the code: create the analysis object \
+yourself in your code, on WORKSPACE, once, and reuse it.
+
+{LABELS}
+
+How to work:
+- Start from the flagged line in ALERT. Find the callable around it and the data it \
+uses, and follow values back to where they come from, with CLDK queries combined in \
+small helper functions. Read exact lines from the files when you need them. For SQL \
+alerts, check whether a value from the request reaches the string that becomes the \
+query, not only the call that runs it.
+- Judge the flagged primitive by how it actually behaves in the Python version in \
+use (3.12) and with the library's defaults, unless the code changes them.
+- If the data passes a validation or sanitisation check before the flagged code, \
+work out concretely whether any input that passes the check can still cause harm.
+- Base every claim on output from this conversation. Never describe code you have not \
+read.
+- When you are confident, call submit with the label, a rationale of one to three \
+sentences that cites line numbers, and evidence: the line ranges you relied on, with \
+paths relative to WORKSPACE.
+- Every reply must call a tool. Print compact results: the token budget is shared by \
+every alert in the run. Do not modify files while classifying. An access the sandbox \
+refused will not succeed if you repeat it.
+
+{ACCESS_RULES}
+
+The rest of this message is your guide to CLDK and to writing code for run_python.
+
+"""
+
+
+def codeact_system_prompt(guide: str) -> str:
+    """The CodeAct agent's system prompt: the harness's rules, then the generated CLDK guide."""
+    return CODEACT_SYSTEM_PROMPT + guide.strip() + "\n"

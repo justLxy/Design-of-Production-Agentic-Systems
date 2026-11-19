@@ -1,0 +1,24 @@
+version: 1
+filesystem_policy:
+  include_workdir: true
+  # Read: system paths, the agent under /app, and the code directories of the three
+  # targets (OpenShell skips the ones a given image does not have). Never /target
+  # itself, so the answer key and .git stay out of reach.
+  read_only: [/bin, /usr, /lib, /lib64, /etc, /proc, /dev/urandom, /app,
+              /target/testcode, /target/helpers, /target/app.py,
+              /target/radicale,
+              /target/python, /target/scripts]
+  # Write: only the sandbox home (the workspace copies live in /sandbox/work) and /tmp.
+  read_write: [/sandbox, /tmp, /dev/null]
+landlock:
+  compatibility: hard_requirement
+network_policies:
+  model_provider:
+    endpoints:
+      - host: api.openai.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-write
+    binaries:
+      - path: /usr/local/bin/python3.12

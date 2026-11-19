@@ -136,3 +136,31 @@ def test_diff_round_trip_and_flagged_line():
 def test_an_unchanged_file_is_rejected_with_no_checks(tmp_path):
     result = check_patch("f.py", "x = 1\n", "x = 1\n", tmp_path, 1, "B608")
     assert result["status"] == "rejected" and result["diff"] == ""
+
+
+def _write(root: Path, text: str) -> None:
+    (root / "f.py").write_text(text)
+
+
+EVAL = "def f(x):\n    return eval(x)\n"
+
+
+def test_a_nosec_comment_is_not_a_fix(tmp_path):
+    hidden = EVAL.replace("eval(x)", "eval(x)  # nosec")
+    _write(tmp_path, hidden)
+    result = check_patch("f.py", EVAL, hidden, tmp_path, 2, "B307")
+    assert result["checks"]["touches_flagged_line"] is True
+    assert result["checks"]["clean_rescan"] is False and result["status"] == "rejected"
+
+
+def test_a_patch_that_breaks_the_syntax_is_not_clean(tmp_path):
+    broken = EVAL.replace("eval(x)", "eval(x")
+    _write(tmp_path, broken)
+    result = check_patch("f.py", EVAL, broken, tmp_path, 2, "B307")
+    assert result["checks"]["clean_rescan"] is False and result["status"] == "rejected"
+
+
+def test_a_real_fix_is_still_accepted(tmp_path):
+    fixed = "import ast\n" + EVAL.replace("eval(x)", "ast.literal_eval(x)")
+    _write(tmp_path, fixed)
+    assert check_patch("f.py", EVAL, fixed, tmp_path, 2, "B307")["status"] == "accepted"

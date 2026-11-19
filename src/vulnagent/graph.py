@@ -1,7 +1,9 @@
-"""Main agent loop: one tool-use loop per alert.
+"""Main agent loop: per alert, a classification loop and, for label 1, a remediation loop.
 
 Before every model call it checks max_steps, then the budget. The tools and
 nudge steps update the no-progress counter. Any of these three can stop the run.
+After an alert is settled, the runtime (never the model) routes it to
+remediation if its label is 1 and skips remediation otherwise.
 """
 
 import json
@@ -12,11 +14,11 @@ import openai
 
 from vulnagent.budget import Budget
 from vulnagent.llm import ModelClient, ModelReply, ToolCall
-from vulnagent.prompts import NUDGE, alert_prompt
+from vulnagent.prompts import NUDGE, alert_prompt, remediation_prompt
 from vulnagent.trace import TerminalStatus, Trace
 
 NO_PROGRESS_LIMIT = 3
-ROLE = "classifier"
+REMEDIATION_TURNS = 8  # model turns allowed in one alert's remediation stage
 
 
 class RunStopped(Exception):
@@ -73,6 +75,7 @@ class Agent:
         for alert in self.alerts:
             if alert["alert_id"] not in self.rows:
                 self._settle(alert, node, status, None, rationale, [])
+                self._skip_remediation(alert["alert_id"])
 
     # Alert level
 
@@ -88,8 +91,19 @@ class Agent:
                 reply = self._triage(s)
                 if reply is not None:
                     self._route(s, reply)
+            self._remediation_stage(s)
 
     def _triage(self, s: AlertState) -> ModelReply | None:
+        """Classification turn: one model call; an API failure settles the alert as error."""
+        try:
+            return self._call_model(s, "classifier")
+        except openai.APIError as e:
+            aid = s.alert["alert_id"]
+            self.trace.routing(aid, "error", by="runtime", reason=f"model call failed: {type(e).__name__}")
+            self._settle(s.alert, "triage", "error", None, f"The model call failed: {e}", [])
+            return None
+
+    def _call_model(self, s: AlertState, role: str) -> ModelReply:
         """Check max_steps and the budget, then make one model call."""
         aid = s.alert["alert_id"]
         if self.steps >= self.max_steps:
@@ -102,13 +116,8 @@ class Agent:
             raise RunStopped(TerminalStatus.BUDGET_EXHAUSTED, "token budget exhausted")
 
         self.steps += 1
-        try:
-            reply = self.client.complete(s.items, self.tools)
-        except openai.APIError as e:
-            self.trace.routing(aid, "error", by="runtime", reason=f"model call failed: {type(e).__name__}")
-            self._settle(s.alert, "triage", "error", None, f"The model call failed: {e}", [])
-            return None
-        self.trace.model_call(aid, ROLE, self.client.model, reply.usage,
+        reply = self.client.complete(s.items, self.tools)
+        self.trace.model_call(aid, role, self.client.model, reply.usage,
                               finish_reason=reply.finish_reason)
         s.items += reply.output_items
         s.counted_tokens = reply.usage["input"] + reply.usage["output"]
@@ -132,12 +141,22 @@ class Agent:
             s.items.append({"role": "user", "content": NUDGE})
             self.trace.routing(aid, "triage", by="runtime")
 
-    def _run_tools(self, s: AlertState, calls: list[ToolCall]) -> None:
-        """Run the tool calls from one reply in order. submit is handled here too."""
+    def _run_tools(self, s: AlertState, calls: list[ToolCall], stage: str = "classification") -> None:
+        """Run the tool calls from one reply in order. submit settles the alert, but only while classifying."""
         aid = s.alert["alert_id"]
         progressed = False
         for i, call in enumerate(calls):
             self.steps += 1
+            reason = None
+            if stage == "remediation" and call.name == "submit":
+                reason = "submit is only for the classification stage"
+            elif stage == "classification" and call.name in getattr(self.toolbox, "write_tools", ()):
+                reason = f"{call.name} is only for the remediation stage, after you submit label 1"
+            if reason is not None:
+                obs = self.toolbox.decline(aid, call.id, call.name, call.arguments, reason)
+                s.items.append(obs.as_item())
+                s.seen_calls.add(_call_key(call))
+                continue
             obs = self.toolbox.dispatch(aid, call.id, call.name, call.arguments)
             s.items.append(obs.as_item())
             if call.name == "submit" and obs.ok:
@@ -153,7 +172,58 @@ class Agent:
             progressed |= obs.ok and key not in s.seen_calls
             s.seen_calls.add(key)
         self._track_progress(s, progressed)
-        self.trace.routing(aid, "triage", by="runtime")
+        self.trace.routing(aid, "triage" if stage == "classification" else "remediator", by="runtime")
+
+    # Remediation
+
+    def _remediation_stage(self, s: AlertState) -> None:
+        """The runtime's routing decision: label 1 goes to remediation, everything else is skipped."""
+        aid = s.alert["alert_id"]
+        row = self.rows[aid]
+        if row["status"] != "classified" or row["label"] != 1:
+            self._skip_remediation(aid)
+            return
+        if not getattr(self.toolbox, "can_remediate", False):
+            self._skip_remediation(aid, reason="this toolbox has no write tools")
+            return
+        self.trace.routing(aid, "remediate", by="runtime", label=1)
+        try:
+            self._remediate(s)
+        finally:
+            # Also after a cutoff or failsafe inside remediation: record what the file looks like now.
+            remediation = self.toolbox.review(s.alert)
+            row["remediation"] = remediation
+            self.trace.state_change(aid, "remediation", checks=remediation["checks"],
+                                    status=remediation["status"])
+
+    def _remediate(self, s: AlertState) -> None:
+        aid = s.alert["alert_id"]
+        s.items.append({"role": "user", "content": remediation_prompt(s.alert, self.toolbox.remediation_hint)})
+        s.seen_calls.clear()
+        s.stalled = 0
+        for _ in range(REMEDIATION_TURNS):
+            try:
+                reply = self._call_model(s, "remediator")
+            except openai.APIError as e:
+                self.trace.routing(aid, "end_remediation", by="runtime",
+                                   reason=f"model call failed: {type(e).__name__}")
+                return
+            if reply.tool_calls:
+                self.trace.routing(aid, "tools", by="model")
+                self._run_tools(s, reply.tool_calls, stage="remediation")
+            else:
+                by = "model" if reply.finish_reason == "stop" else "runtime"
+                self.trace.routing(aid, "end_remediation", by=by, finish_reason=reply.finish_reason)
+                return
+        self.trace.routing(aid, "end_remediation", by="runtime", reason=f"{REMEDIATION_TURNS} turns used")
+
+    def _skip_remediation(self, aid: str, reason: str | None = None) -> None:
+        row = self.rows[aid]
+        extra = {"reason": reason} if reason else {}
+        self.trace.routing(aid, "skip_remediation", by="runtime", label=row["label"],
+                           alert_status=row["status"], **extra)
+        self.trace.state_change(aid, "remediation", checks=row["remediation"]["checks"],
+                                status=row["remediation"]["status"])
 
     def _track_progress(self, s: AlertState, progressed: bool) -> None:
         """Stop the run after too many turns in a row without new information."""

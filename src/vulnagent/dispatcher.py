@@ -187,6 +187,8 @@ class LocalToolbox:
 
     via = None
     system_prompt = SYSTEM_PROMPT
+    can_remediate = False  # HW1's tools cannot edit files
+    remediation_hint = ""
 
     def __init__(self, ws: Workspace, trace: Trace):
         self.ws = ws

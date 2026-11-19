@@ -1,0 +1,342 @@
+{
+  "target": {
+    "input": "/sandbox/work/target",
+    "commit": "eff8027f3dc4910be1659ee71f4b4a454ade5a8c"
+  },
+  "scan": {
+    "bandit_version": "1.9.4",
+    "min_severity": "MEDIUM",
+    "alert_count": 10
+  },
+  "budget": {
+    "max_tokens": 3000000,
+    "used_tokens": 755131,
+    "exhausted": false
+  },
+  "alerts": [
+    {
+      "alert_id": "radicale-auth-oauth2-py-60-B113",
+      "test_id": "B113",
+      "path": "radicale/auth/oauth2.py",
+      "line": 60,
+      "severity": "MEDIUM",
+      "confidence": "LOW",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The authentication path performs a blocking POST to the configured OAuth token endpoint without a timeout (lines 60\u201362). If that endpoint or its network connection stalls, each login can remain blocked indefinitely, tying up server capacity and enabling denial of service; credentials and endpoint are not needed to be attacker-controlled for this availability risk.",
+      "evidence": [
+        {
+          "path": "radicale/auth/oauth2.py",
+          "start_line": 44,
+          "end_line": 48
+        },
+        {
+          "path": "radicale/auth/oauth2.py",
+          "start_line": 59,
+          "end_line": 69
+        }
+      ],
+      "remediation": {
+        "status": "rejected",
+        "diff": "--- a/radicale/auth/oauth2.py\n+++ b/radicale/auth/oauth2.py\n@@ -58,7 +58,7 @@\n \n             req_headers = {\"Content-Type\": \"application/x-www-form-urlencoded\"}\n             response = requests.post(\n-                self._endpoint, data=req_params, headers=req_headers\n+                self._endpoint, data=req_params, headers=req_headers, timeout=10\n             )\n             if (\n                 response.status_code == requests.codes.ok\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": false,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-hook-email-init-py-227-B324",
+      "test_id": "B324",
+      "path": "radicale/hook/email/__init__.py",
+      "line": 227,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 0,
+      "status": "classified",
+      "rationale": "The SHA-1 digest is only used as a compact equality comparison for event-detail dictionaries, not for authentication, signatures, or another security decision. Although the fields originate in calendar data, a collision would at most cause this comparison to miss an event-detail change; this is non-security use and does not make weak SHA-1 a vulnerability here.",
+      "evidence": [
+        {
+          "path": "radicale/hook/email/__init__.py",
+          "start_line": 222,
+          "end_line": 227
+        },
+        {
+          "path": "radicale/hook/email/__init__.py",
+          "start_line": 229,
+          "end_line": 250
+        }
+      ],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-131-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 131,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The file contents are deserialized by pickle before the version check, so a malicious pickle can execute code during loading; checking the returned version cannot prevent that. The storage path is configurable and this code does not establish that database files are protected from attacker modification, making unsafe deserialization a potential vulnerability if an attacker can write to the configured sharing database.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 89,
+          "end_line": 99
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 127,
+          "end_line": 136
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 274,
+          "end_line": 281
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/radicale/sharing/files.py\n+++ b/radicale/sharing/files.py\n@@ -16,6 +16,7 @@\n \n import os\n import pickle\n+import json\n import urllib\n from typing import Union\n \n@@ -128,7 +129,7 @@\n         with self._storage.acquire_lock(\"r\", User):\n             # read file\n             with open(sharing_config_file, \"rb\") as fb:\n-                (version, row) = pickle.load(fb)\n+                (version, row) = json.loads(fb.read())\n \n             if version != DB_VERSION:\n                 return {\"status\": \"error\"}\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-208-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 208,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The sharing database directory is loaded by scanning every regular file and unpickling it without integrity or origin validation (lines 201\u2013208). Since pickle deserialization can execute payload code, an attacker able to place or modify a file in this configured storage directory can execute code when listing shares; normal writes use pickle too (lines 276\u2013282), but that does not make tampered files safe.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 199,
+          "end_line": 208
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 274,
+          "end_line": 282
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/radicale/sharing/files.py\n+++ b/radicale/sharing/files.py\n@@ -26,6 +26,11 @@\n \"\"\" File 'database' based sharing by token or map \"\"\"\n \n DB_VERSION: str = \"1\"\n+\n+\n+class RestrictedUnpickler(pickle.Unpickler):\n+    def find_class(self, module: str, name: str):\n+        raise pickle.UnpicklingError(\"global objects are not allowed\")\n \n \n class Sharing(sharing.BaseSharing):\n@@ -205,7 +210,7 @@\n                     logger.trace(\"sharing/%s/list: check file: %r\", ShareType, entry.name)\n                     # read file\n                     with open(entry, \"rb\") as fb:\n-                        (version, row) = pickle.load(fb)\n+                        (version, row) = RestrictedUnpickler(fb).load()\n \n                     if version != DB_VERSION:\n                         # skip\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-316-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 316,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "Line 316 deserializes a pickle from a persistent sharing database file, and the resulting version check occurs only after unpickling (lines 316\u2013318), so it cannot prevent pickle payload code execution. Files are created by this application (lines 257\u2013281), but the database path is configurable and no integrity/authentication check is shown; an attacker able to modify a sharing file can execute code when an update reads it.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 312,
+          "end_line": 319
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 257,
+          "end_line": 281
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 35,
+          "end_line": 44
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/radicale/sharing/files.py\n+++ b/radicale/sharing/files.py\n@@ -26,6 +26,11 @@\n \"\"\" File 'database' based sharing by token or map \"\"\"\n \n DB_VERSION: str = \"1\"\n+\n+\n+class RestrictedUnpickler(pickle.Unpickler):\n+    def find_class(self, module: str, name: str):\n+        raise pickle.UnpicklingError(\"global objects are not allowed\")\n \n \n class Sharing(sharing.BaseSharing):\n@@ -313,7 +318,7 @@\n         with self._storage.acquire_lock(\"w\", OwnerOrUser, path=sharing_config_file):\n             # read file\n             with open(sharing_config_file, \"rb\") as fb:\n-                (version, row) = pickle.load(fb)\n+                (version, row) = RestrictedUnpickler(fb).load()\n \n             if version != DB_VERSION:\n                 return {\"status\": \"error\"}\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-sharing-files-py-374-B301",
+      "test_id": "B301",
+      "path": "radicale/sharing/files.py",
+      "line": 374,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The file path is selected from sharing-database directories and an encoded token/path (lines 365-373), but the contents are then deserialized with unrestricted pickle.load at line 374 before even checking the version at line 376. If an attacker can write or replace a database entry, loading it can execute pickle payload code; the version check occurs too late. This is a potential vulnerability contingent on write access to the sharing database.",
+      "evidence": [
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 365,
+          "end_line": 376
+        },
+        {
+          "path": "radicale/sharing/files.py",
+          "start_line": 277,
+          "end_line": 281
+        }
+      ],
+      "remediation": {
+        "status": "rejected",
+        "diff": "--- a/radicale/sharing/files.py\n+++ b/radicale/sharing/files.py\n@@ -371,7 +371,7 @@\n         with self._storage.acquire_lock(\"w\", User, path=sharing_config_file):\n             # read file\n             with open(sharing_config_file, \"rb\") as fb:\n-                (version, row) = pickle.load(fb)\n+                (version, row) = pickle.loads(fb.read())\n \n             if version != DB_VERSION:\n                 return {\"status\": \"error\"}\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": false
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-cache-py-109-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/cache.py",
+      "line": 109,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": null,
+      "status": "error",
+      "rationale": "The model call failed: Error code: 400 - {'error': {'message': 'Invalid prompt: your prompt was flagged as potentially violating our usage policy. Please try again with a different prompt: https://platform.openai.com/docs/guides/reasoning#advice-on-prompting', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_prompt'}}",
+      "evidence": [],
+      "remediation": {
+        "status": "skipped",
+        "diff": "",
+        "checks": {
+          "applies": null,
+          "touches_flagged_line": null,
+          "clean_rescan": null
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-history-py-53-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/history.py",
+      "line": 53,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "`pickle.load` deserializes the history cache file without restricting pickle behavior (history.py:50\u201353), so a maliciously modified cache entry can execute code during loading. The method is reached during uploads after item storage (upload.py:66\u201368); the attack requires write access to the cache file/location.",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/history.py",
+          "start_line": 50,
+          "end_line": 53
+        },
+        {
+          "path": "radicale/storage/multifilesystem/upload.py",
+          "start_line": 66,
+          "end_line": 68
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/radicale/storage/multifilesystem/history.py\n+++ b/radicale/storage/multifilesystem/history.py\n@@ -18,8 +18,8 @@\n \n import binascii\n import contextlib\n+import json\n import os\n-import pickle\n from typing import BinaryIO, Optional, cast\n \n import radicale.item as radicale_item\n@@ -50,9 +50,9 @@\n         history_folder = self._storage._get_collection_cache_subfolder(self._filesystem_path, \".Radicale.cache\", \"history\")\n         try:\n             with open(os.path.join(history_folder, href), \"rb\") as f:\n-                cache_etag, history_etag = pickle.load(f)\n-        except (FileNotFoundError, pickle.UnpicklingError, ValueError) as e:\n-            if isinstance(e, (pickle.UnpicklingError, ValueError)):\n+                cache_etag, history_etag = json.loads(f.read().decode(\"utf-8\"))\n+        except (FileNotFoundError, ValueError) as e:\n+            if isinstance(e, ValueError):\n                 logger.warning(\n                     \"Failed to load history cache entry %r in %r: %s\",\n                     href, self.path, e, exc_info=True)\n@@ -69,7 +69,7 @@\n             with contextlib.suppress(PermissionError), self._atomic_write(\n                     os.path.join(history_folder, href), \"wb\") as fo:\n                 fb = cast(BinaryIO, fo)\n-                pickle.dump([etag, history_etag], fb)\n+                fb.write(json.dumps([etag, history_etag]).encode(\"utf-8\"))\n         return history_etag\n \n     def _get_deleted_history_hrefs(self):\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-lock-py-102-B602",
+      "test_id": "B602",
+      "path": "radicale/storage/multifilesystem/lock.py",
+      "line": 102,
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "The hook is a configurable command and is executed with shell=True at lines 86\u2013102; shell syntax is intentionally enabled, so anyone able to influence the storage hook configuration can run arbitrary commands. The request-derived path/request/user placeholders are shell-quoted, but that does not make the configured command itself safe; this is a potential vulnerability dependent on configuration trust.",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/lock.py",
+          "start_line": 80,
+          "end_line": 102
+        },
+        {
+          "path": "radicale/storage/multifilesystem/lock.py",
+          "start_line": 56,
+          "end_line": 61
+        },
+        {
+          "path": "radicale/config.py",
+          "start_line": 566,
+          "end_line": 569
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/radicale/storage/multifilesystem/lock.py\n+++ b/radicale/storage/multifilesystem/lock.py\n@@ -99,7 +99,7 @@\n                         command, stdin=subprocess.DEVNULL,\n                         stdout=subprocess.PIPE if debug else subprocess.DEVNULL,\n                         stderr=subprocess.PIPE if debug else subprocess.DEVNULL,\n-                        shell=True, universal_newlines=True, preexec_fn=preexec_fn,\n+                        shell=False, universal_newlines=True, preexec_fn=preexec_fn,\n                         cwd=self._filesystem_folder, creationflags=creationflags)\n                 except Exception as e:\n                     logger.error(\"Execution of storage hook not successful on 'Popen': %s\" % e)\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    },
+    {
+      "alert_id": "radicale-storage-multifilesystem-sync-py-79-B301",
+      "test_id": "B301",
+      "path": "radicale/storage/multifilesystem/sync.py",
+      "line": 79,
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "label": 1,
+      "status": "classified",
+      "rationale": "`sync()` accepts an old token, validates its suffix as exactly 64 lowercase hexadecimal characters, and then uses it to select a file in the sync-token cache for `pickle.load` (lines 47\u201354, 73\u201379). An attacker able to place/replace files in that cache can supply a malicious pickle; the token-format check does not make pickle deserialization safe, so this is a potential code-execution vulnerability under an attacker-writable-cache threat model.",
+      "evidence": [
+        {
+          "path": "radicale/storage/multifilesystem/sync.py",
+          "start_line": 47,
+          "end_line": 54
+        },
+        {
+          "path": "radicale/storage/multifilesystem/sync.py",
+          "start_line": 70,
+          "end_line": 80
+        }
+      ],
+      "remediation": {
+        "status": "accepted",
+        "diff": "--- a/radicale/storage/multifilesystem/sync.py\n+++ b/radicale/storage/multifilesystem/sync.py\n@@ -18,6 +18,7 @@\n \n import contextlib\n import itertools\n+import json\n import os\n import pickle\n from hashlib import sha256\n@@ -76,7 +77,7 @@\n             try:\n                 # Race: Another process might have deleted the file.\n                 with open(old_token_path, \"rb\") as f:\n-                    old_state = pickle.load(f)\n+                    old_state = json.load(f)\n             except (FileNotFoundError, pickle.UnpicklingError,\n                     ValueError) as e:\n                 if isinstance(e, (pickle.UnpicklingError, ValueError)):\n",
+        "checks": {
+          "applies": true,
+          "touches_flagged_line": true,
+          "clean_rescan": true
+        }
+      }
+    }
+  ]
+}

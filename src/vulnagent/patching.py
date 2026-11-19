@@ -2,9 +2,11 @@
 
 applies: the diff applies cleanly to the file at the pinned commit.
 touches_flagged_line: the diff removes or changes the flagged line.
-clean_rescan: Bandit no longer reports the alert's rule in the changed region.
+clean_rescan: the patched file still parses, and Bandit, run with --ignore-nosec, no
+longer reports the alert's rule in the changed region.
 """
 
+import ast
 import difflib
 import re
 from dataclasses import dataclass, field
@@ -88,11 +90,23 @@ def touched_region(diff: str, line: int) -> tuple[int, int] | None:
 
 
 def rescan(root: Path, rel_path: str) -> list[dict]:
-    """Bandit 1.9.4, MEDIUM and up, on one file under root."""
-    scan = {"paths": [rel_path], "exclude": [], "min_severity": "MEDIUM", "bandit_version": "1.9.4"}
+    """Bandit 1.9.4, MEDIUM and up, on one file under root.
+
+    --ignore-nosec: a "# nosec" comment hides a finding from Bandit without fixing anything.
+    """
+    scan = {"paths": [rel_path], "exclude": [], "min_severity": "MEDIUM", "bandit_version": "1.9.4",
+            "ignore_nosec": True}
     return [{"test_id": a["test_id"], "line": a["line"], "severity": a["severity"],
              "confidence": a["confidence"], "issue_text": a["issue_text"]}
             for a in run_bandit(root, scan)]
+
+
+def parses(source: str) -> bool:
+    try:
+        ast.parse(source)
+    except (SyntaxError, ValueError):
+        return False
+    return True
 
 
 def check_patch(path: str, original: str, current: str, scan_root: Path,
@@ -105,6 +119,8 @@ def check_patch(path: str, original: str, current: str, scan_root: Path,
     region = touched_region(diff, line)
     if region is None:
         clean = None
+    elif not parses(current):
+        clean = False  # Bandit skips a file it cannot parse, so its silence would mean nothing
     else:
         start, end = region
         clean = not any(a["test_id"] == test_id and start <= a["line"] <= end

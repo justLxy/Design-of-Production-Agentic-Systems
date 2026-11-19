@@ -1,0 +1,107 @@
+{
+  "hw1": [
+    {
+      "case": "ok",
+      "ok": true,
+      "ms": 29.48,
+      "text": "testcode/BenchmarkTest00011.py, lines 45-47 of 57\n   45| \t\timport helpers.db_sqlite\n   46| \n   47| \t\tsql = f'SELECT username from USERS where password = ?'"
+    },
+    {
+      "case": "model: not JSON",
+      "ok": false,
+      "ms": 24.88,
+      "text": "REFUSED: arguments are not valid JSON: Expecting ',' delimiter: line 1 column 60 (char 59)"
+    },
+    {
+      "case": "dispatcher: wrong type",
+      "ok": false,
+      "ms": 43.49,
+      "text": "REFUSED: bad arguments for read_file: 5 is not of type 'string'"
+    },
+    {
+      "case": "tool: bad line range",
+      "ok": false,
+      "ms": 57.89,
+      "text": "REFUSED: invalid line range 50-45"
+    }
+  ],
+  "hw2": [
+    {
+      "case": "ok",
+      "ok": true,
+      "ms": 21.88,
+      "text": "{\n  \"text\": \"testcode/BenchmarkTest00011.py, lines 45-47 of 57\\n   45| \\t\\timport helpers.db_sqlite\\n   46| \\n   47| \\t\\tsql = f'SELECT username from USERS where password = ?'\"\n}"
+    },
+    {
+      "case": "model: not JSON",
+      "ok": false,
+      "ms": 18.83,
+      "text": "REFUSED: arguments are not valid JSON: Expecting ',' delimiter: line 1 column 60 (char 59)"
+    },
+    {
+      "case": "dispatcher: wrong type",
+      "ok": false,
+      "ms": 20.33,
+      "text": "REFUSED: bad arguments for read_file: path: 5 is not of type 'string'"
+    },
+    {
+      "case": "tool: bad line range",
+      "ok": false,
+      "ms": 26.4,
+      "text": "refused: invalid line range 50-45"
+    }
+  ],
+  "hw2_raw": [
+    {
+      "case": "server: unknown argument",
+      "ok": false,
+      "ms": 11.51,
+      "text": "refused: bad arguments for read_file: arguments: Additional properties are not allowed ('colour' was unexpected)"
+    },
+    {
+      "case": "server: wrong type",
+      "ok": false,
+      "ms": 0.89,
+      "text": "refused: bad arguments for read_file: start_line: '45' is not of type 'integer'"
+    },
+    {
+      "case": "tool: bad line range",
+      "ok": false,
+      "ms": 2.52,
+      "text": "refused: invalid line range 50-45"
+    }
+  ],
+  "read_file_schema": {
+    "properties": {
+      "path": {
+        "title": "Path",
+        "type": "string"
+      },
+      "start_line": {
+        "default": 1,
+        "minimum": 1,
+        "title": "Start Line",
+        "type": "integer"
+      },
+      "end_line": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "End Line"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "title": "read_fileArguments",
+    "type": "object",
+    "additionalProperties": false
+  }
+}

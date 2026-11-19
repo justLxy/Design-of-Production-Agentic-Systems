@@ -14,6 +14,7 @@ from vulnagent.llm import ModelClient
 from vulnagent.report import build_report, summary, target_commit, write_report
 from vulnagent.trace import TerminalStatus, Trace
 from vulnagent.config import REPO_ROOT
+from vulnagent.codeact import CodeActToolbox
 from vulnagent.mcp_host import McpToolbox
 
 
@@ -42,12 +43,20 @@ def discover(input_dir: Path, scan: dict, trace: Trace) -> list[dict]:
     return alerts
 
 
+def image_commit() -> str | None:
+    """The pinned commit the sandbox image recorded at build time (the sandbox hides .git)."""
+    path = Path("/etc/vulnagent-target-commit")
+    return path.read_text().strip() if path.is_file() else None
+
+
 def make_toolbox(cfg: dict, input_dir: Path, trace: Trace):
     """The agent's tools for [agent] kind."""
     kind = cfg["agent"]["kind"]
     if kind == "mcp":
-        return McpToolbox(REPO_ROOT / cfg["mcp"]["config"], input_dir, trace)
-    raise NotImplementedError(f"agent kind {kind!r} is not implemented yet")
+        return McpToolbox(REPO_ROOT / cfg["mcp"]["config"], input_dir, trace, analysis_scope=cfg["scan"]["paths"])
+    if kind == "codeact":
+        return CodeActToolbox(cfg, input_dir, trace)
+    raise ValueError(f"unknown agent kind {kind!r}")
 
 
 def main() -> None:
@@ -84,7 +93,7 @@ def main() -> None:
             toolbox.close()
         # always write the terminal event and report.json, also after a crash
         trace.terminal(status)
-        commit = cfg.get("target", {}).get("commit") or target_commit(args.input)
+        commit = image_commit() or cfg.get("target", {}).get("commit") or target_commit(args.input)
         report = build_report(
             str(args.input), commit, cfg["scan"], alerts,
             agent.rows if agent is not None else {},

@@ -10,15 +10,23 @@ name = "gpt-6-luna"
 reasoning_effort = "low"
 
 [budget]
-max_tokens = 1500000
+max_tokens = 3000000
 output_allowance = 4000
-max_steps = 800
+max_steps = 2000
 
 [agent]
 kind = "mcp"
 
 [mcp]
 config = "mcp.json"
+
+[codeact]
+# Used when kind = "codeact": the generated CLDK guide the harness appends to the system
+# prompt, the interpreter of the execution kernel (a copy that the network policy does not
+# name, so model-written code cannot reach the network) and the time limit of one run_python call.
+prompt = "prompts/codeact_agent.md"
+kernel_python = "/usr/local/bin/python3.12-kernel"
+timeout_s = 600
 
 [sandbox]
 policy = "policy.yaml"

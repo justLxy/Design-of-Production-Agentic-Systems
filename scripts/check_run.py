@@ -25,7 +25,7 @@ def load_events(path: Path) -> tuple[list[dict], list[str]]:
     return events, errors
 
 
-def check_trace(events: list[dict]) -> list[str]:
+def check_trace(events: list[dict], require_via: bool = True) -> list[str]:
     errors = []
 
     # Invariant 1: every line validates against trace.schema.json.
@@ -68,6 +68,15 @@ def check_trace(events: list[dict]) -> list[str]:
             if nxt.get("kind") != "tool_result" or nxt.get("tool") != event.get("tool"):
                 errors.append(f"line {i}: tool_request is not immediately followed by its tool_result")
 
+    # HW2: every dispatched call says which path it took, and every refusal says who refused it.
+    for i, event in enumerate(events, 1):
+        if require_via and event.get("kind") in ("tool_request", "tool_result") \
+                and event.get("via") not in ("mcp", "codeact"):
+            errors.append(f"line {i}: {event['kind']} has no via (mcp or codeact)")
+        if event.get("kind") == "tool_result" and event.get("ok") is False and "refused_by" not in event \
+                and str(event.get("error", "")).lower().startswith("refused"):
+            errors.append(f"line {i}: refused tool_result has no refused_by")
+
     return errors
 
 
@@ -108,6 +117,25 @@ def check_report(report: dict, events: list[dict]) -> list[str]:
             errors.append(f"{alert.get('alert_id')}: state_change says "
                           f"({found[0]['alert_status']}, {found[0]['label']}), "
                           f"row says ({alert.get('status')}, {alert.get('label')})")
+
+    # HW2: the runtime makes one remediation decision per row, and only label 1 is remediated.
+    for alert in alerts:
+        aid = alert.get("alert_id")
+        decisions = [e for e in events if e.get("kind") == "routing" and e.get("alert_id") == aid
+                     and e.get("decision") in ("remediate", "skip_remediation")]
+        if len(decisions) != 1 or decisions[0].get("by") != "runtime":
+            errors.append(f"{aid}: expected one remediate/skip_remediation routing by runtime, found {len(decisions)}")
+        elif (decisions[0]["decision"] == "remediate") != (alert.get("status") == "classified" and alert.get("label") == 1):
+            errors.append(f"{aid}: routed to {decisions[0]['decision']} but label is {alert.get('label')}")
+        states = [e for e in events if e.get("kind") == "state_change" and e.get("alert_id") == aid
+                  and e.get("node") == "remediation"]
+        remediation = alert.get("remediation", {})
+        if len(states) != 1:
+            errors.append(f"{aid}: {len(states)} remediation state_change events, expected 1")
+        elif states[0].get("checks") != remediation.get("checks"):
+            errors.append(f"{aid}: remediation checks in the trace differ from report.json")
+        if not (alert.get("status") == "classified" and alert.get("label") == 1) and remediation.get("status") != "skipped":
+            errors.append(f"{aid}: remediation is {remediation.get('status')} but the row is not labelled 1")
 
     return errors
 

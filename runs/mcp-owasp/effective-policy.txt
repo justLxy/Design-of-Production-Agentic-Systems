@@ -1,0 +1,52 @@
+Version:      2
+Hash:         10b1a50a135dc323b279333b4cee35399c733ffcc81f82574a1f37fbfd92597f
+Status:       Effective
+Source:       sandbox
+Config rev:   968745531646384527
+---
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /lib64
+    - /etc
+    - /proc
+    - /dev/urandom
+    - /app
+    - /target/testcode
+    - /target/helpers
+    - /target/app.py
+    - /target/radicale
+    - /target/python
+    - /target/scripts
+    - /var/log
+  read_write:
+    - /sandbox
+    - /tmp
+    - /dev/null
+landlock:
+  compatibility: hard_requirement
+network_policies:
+  _provider_openai:
+    name: _provider_openai
+    endpoints:
+      - host: api.openai.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-write
+    binaries:
+      - path: /usr/local/bin/python3.12
+  model_provider:
+    name: model_provider
+    endpoints:
+      - host: api.openai.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        access: read-write
+    binaries:
+      - path: /usr/local/bin/python3.12

@@ -21,7 +21,7 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 from vulnagent.dispatcher import Observation
-from vulnagent.prompts import MCP_SYSTEM_PROMPT
+from vulnagent.prompts import MCP_REMEDIATION, MCP_SYSTEM_PROMPT
 from vulnagent.trace import Trace
 
 HOST_ONLY = {"set_alert", "review_patch"}
@@ -85,12 +85,16 @@ class McpToolbox:
 
     via = "mcp"
     system_prompt = MCP_SYSTEM_PROMPT
+    can_remediate = True
+    remediation_hint = MCP_REMEDIATION
+    write_tools = frozenset({"edit"})  # the runtime declines these while classifying
 
-    def __init__(self, mcp_config: Path, input_dir: Path, trace: Trace):
+    def __init__(self, mcp_config: Path, input_dir: Path, trace: Trace, analysis_scope: list[str] | None = None):
         self.trace = trace
         name, command, args, env = load_server_config(mcp_config)
         self.workdir = Path(tempfile.mkdtemp(prefix="vulnagent-server-"))
-        env = {**env, "VULNAGENT_SOURCE": str(input_dir.resolve()), "VULNAGENT_WORKDIR": str(self.workdir)}
+        env = {**env, "VULNAGENT_SOURCE": str(input_dir.resolve()), "VULNAGENT_WORKDIR": str(self.workdir),
+               "VULNAGENT_ANALYSIS_SCOPE": ":".join(analysis_scope or [])}
         env.setdefault("PATH", os.environ.get("PATH", "/usr/bin:/bin"))
         self.conn = McpConnection(command, args, env)
         listed = self.conn.list_tools()

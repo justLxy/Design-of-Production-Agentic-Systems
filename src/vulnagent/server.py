@@ -92,9 +92,33 @@ def stage(source: Path | None, target_root: Path, entries: list[str], workdir: P
 
 # CLDK, built in the background so initialize answers at once
 
+FULL_ANALYSIS_MAX_BYTES = 5_000_000  # OWASP 2.2 MB and Radicale 1.6 MB of .py; SGLang 20 MB
+
+
+def analysis_files(workspace: Path, scope: list[str]) -> list[str] | None:
+    """The files CLDK should analyse: None (the whole project) unless the project is too big.
+
+    CLDK on all of SGLang needs more than half an hour and far more memory than the sandbox
+    has, so a big project is analysed only within scope (the [scan] paths, as globs).
+    CLDK's own target_files takes a single file, so Analysis copies these files, at the
+    same relative paths, into a separate project directory and analyses that.
+    """
+    sources = [p for p in workspace.rglob("*.py")
+               if withheld_reason(PurePosixPath(p.relative_to(workspace).as_posix())) is None]
+    if not scope or sum(p.stat().st_size for p in sources) <= FULL_ANALYSIS_MAX_BYTES:
+        return None
+    chosen: set[str] = set()
+    for pattern in scope:
+        for hit in workspace.glob(pattern):
+            found = hit.rglob("*.py") if hit.is_dir() else [hit] if hit.suffix == ".py" else []
+            chosen |= {p.relative_to(workspace).as_posix() for p in found if p in sources or p.resolve() in sources}
+    return sorted(chosen) or None
+
+
 class Analysis:
-    def __init__(self, root: Path):
-        self.root = root
+    def __init__(self, root: Path, files: list[str] | None = None):
+        self.root = root  # the workspace; results use paths relative to it
+        self.files = files
         self.ready = threading.Event()
         self.error: Exception | None = None
         self.an: Any = None
@@ -105,9 +129,16 @@ class Analysis:
         started = time.time()
         try:
             from cldk import CLDK
-            self.an = CLDK.python(project_path=str(self.root), analysis_level="program_dependency_graph")
+            project = self.root
+            if self.files is not None:
+                project = self.root.parent / "analysis"
+                for rel in self.files:
+                    (project / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(self.root / rel, project / rel)
+            self.an = CLDK.python(project_path=str(project), analysis_level="program_dependency_graph")
             self.overview = {o.signature: o for o in self.an.get_callables_overview()}
-            log(f"CLDK ready: {len(self.overview)} callables in {time.time() - started:.0f} s")
+            scope = "the whole project" if self.files is None else f"{len(self.files)} files in scope"
+            log(f"CLDK ready: {len(self.overview)} callables ({scope}) in {time.time() - started:.0f} s")
         except Exception as e:  # reported to every analysis call
             self.error = e
             log(f"CLDK failed: {type(e).__name__}: {e}")
@@ -240,9 +271,9 @@ class Review(TypedDict):
 Line = Annotated[int, Field(ge=1)]
 
 
-def build_server(pristine: Path, workspace: Path) -> MCPServer:
+def build_server(pristine: Path, workspace: Path, scope: list[str] | None = None) -> MCPServer:
     policy = AccessPolicy(workspace)
-    analysis = Analysis(workspace)
+    analysis = Analysis(workspace, analysis_files(workspace, scope or []))
     state: dict[str, Any] = {"alert_id": None, "line": None, "test_id": None}
 
     def refused(message: str) -> ToolError:
@@ -297,6 +328,13 @@ def build_server(pristine: Path, workspace: Path) -> MCPServer:
         if len(found) != 1:
             raise Refusal(f"{alert_id} matches {len(found)} files in the workspace")
         return found[0], int(match["line"]), match["test_id"]
+
+    def name_error(e: Exception) -> str:
+        """CLDK's message for an ambiguous or unknown name, in this tool's terms and without
+        the names of OWASP cases the model may not read."""
+        text = str(e).replace("in_module=", "module=")
+        open_case = case_of(policy.open_path) if policy.open_path else None
+        return re.sub(r"BenchmarkTest\d+", lambda m: m[0] if m[0] == open_case else "BenchmarkTest<hidden>", text)
 
     mcp = MCPServer(SERVER_NAME, instructions=(
         "Analysis, text, edit and rescan tools over a disposable copy of the target. "
@@ -353,7 +391,7 @@ def build_server(pristine: Path, workspace: Path) -> MCPServer:
             return sites(analysis.get().callers_of(name, in_module=module))
         except Exception as e:
             if type(e).__name__ in CLDK_NAME_ERRORS:
-                raise Refusal(str(e)) from e
+                raise Refusal(name_error(e)) from e
             raise
 
     @mcp.tool(description=("What a callable calls, by name, including library calls (external: true). Add module "
@@ -364,7 +402,7 @@ def build_server(pristine: Path, workspace: Path) -> MCPServer:
             return sites(analysis.get().callees_of(name, in_module=module))
         except Exception as e:
             if type(e).__name__ in CLDK_NAME_ERRORS:
-                raise Refusal(str(e)) from e
+                raise Refusal(name_error(e)) from e
             raise
 
     @mcp.tool(description=("Route handlers and other entry points in files you may read, with CLDK's "
@@ -451,6 +489,10 @@ def build_server(pristine: Path, workspace: Path) -> MCPServer:
     @guarded
     def set_alert(alert_id: Annotated[str, Field(min_length=1)]) -> Opened:
         rel, line, test_id = alert_lookup(alert_id)
+        # Every alert starts from the pinned file, so its diff holds only its own fix
+        # (two alerts in one file would otherwise see and re-report each other's edits).
+        if (pristine / rel).is_file():
+            shutil.copyfile(pristine / rel, workspace / rel)
         policy.open_path = rel
         state.update(alert_id=alert_id, line=line, test_id=test_id)
         return {"alert_id": alert_id, "path": rel, "case": case_of(rel)}
@@ -527,6 +569,9 @@ def main() -> None:
     parser.add_argument("--target-root", type=Path, default=os.environ.get("VULNAGENT_TARGET_ROOT", "/target"))
     parser.add_argument("--entries", default=os.environ.get("VULNAGENT_TARGET_ENTRIES", DEFAULT_ENTRIES),
                         help="Colon-separated entries of --target-root to stage")
+    parser.add_argument("--analysis-scope", default=os.environ.get("VULNAGENT_ANALYSIS_SCOPE", ""),
+                        help="Colon-separated globs CLDK is limited to when the project is over "
+                             f"{FULL_ANALYSIS_MAX_BYTES // 1_000_000} MB of Python (the host passes the [scan] paths)")
     parser.add_argument("--workdir", type=Path,
                         default=os.environ.get("VULNAGENT_WORKDIR", f"/sandbox/work/server-{os.getpid()}"))
     args = parser.parse_args()
@@ -535,7 +580,14 @@ def main() -> None:
     source = Path(args.source) if args.source else None
     pristine, workspace = stage(source, Path(args.target_root), args.entries.split(":"), Path(args.workdir))
     log(f"serving {workspace} (pinned files in {pristine})")
-    build_server(pristine, workspace).run()
+    scope = [p for p in args.analysis_scope.split(":") if p]
+    build_server(pristine, workspace, scope).run()
+    # The host closed stdin. Exit now instead of tearing down the CLDK graph, which
+    # takes over the 2 s the MCP client waits before it signals the process group
+    # (and the sandbox does not let it signal that group).
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 
 if __name__ == "__main__":

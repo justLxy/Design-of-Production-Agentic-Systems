@@ -78,7 +78,7 @@ def run(tmp_path, replies, alerts=(A11, A12), max_tokens=1_000_000, max_steps=10
     trace.terminal(status)
 
     events = [json.loads(line) for line in trace_path.read_text().splitlines()]
-    assert check_trace(events) == []
+    assert check_trace(events, require_via=False) == []  # HW1's in-process path has no via
     settles = [e["alert_id"] for e in events if e["kind"] == "state_change" and "alert_status" in e]
     assert sorted(settles) == sorted(a["alert_id"] for a in alerts)  # each alert is settled exactly once
     return status, agent.rows, events, model
@@ -188,3 +188,86 @@ def test_a_nudge_goes_back_to_triage(tmp_path):
     seq = decisions(events)
     i = seq.index(("nudge", "runtime"))
     assert seq[i + 1] == ("triage", "runtime")
+
+
+
+class ReviewingToolbox(LocalToolbox):
+    """HW1's tools plus a fixed review, to test the runtime's remediation routing."""
+
+    can_remediate = True
+
+    def review(self, alert: dict) -> dict:
+        return {"status": "accepted", "diff": "--- a/x\n+++ b/x\n",
+                "checks": {"applies": True, "touches_flagged_line": True, "clean_rescan": True}}
+
+
+def test_the_runtime_routes_only_label_1_to_remediation(tmp_path):
+    cfg = {"budget": {"max_tokens": 1_000_000, "output_allowance": 1000, "max_steps": 100}}
+    trace_path = tmp_path / "trace.jsonl"
+    trace = Trace(trace_path, "test-run")
+    model = ScriptedModel([
+        reply(submit(P11, label=1)),
+        reply(text="Replaced the string concatenation with a parameter."),  # remediation ends: no tool call
+        reply(submit(P12, label=0)),
+    ])
+    with Workspace(OWASP) as ws:
+        agent = Agent(cfg, ReviewingToolbox(ws, trace), trace, model)
+        status = agent.run([A11, A12])
+    trace.terminal(status)
+    events = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert check_trace(events, require_via=False) == []  # HW1's in-process path has no via
+    seq = decisions(events)
+    assert ("remediate", "runtime") in seq and ("skip_remediation", "runtime") in seq
+    assert ("end_remediation", "model") in seq
+    remediation = [e for e in events if e["kind"] == "state_change" and e["node"] == "remediation"]
+    assert [e["alert_id"] for e in remediation] == [A11["alert_id"], A12["alert_id"]]
+    assert all("alert_status" not in e and "label" not in e for e in remediation)
+    assert agent.rows[A11["alert_id"]]["remediation"]["status"] == "accepted"
+    assert agent.rows[A12["alert_id"]]["remediation"]["status"] == "skipped"
+    roles = [e["role"] for e in events if e["kind"] == "model_call"]
+    assert roles == ["classifier", "remediator", "classifier"]
+
+
+def test_submit_is_declined_during_remediation(tmp_path):
+    cfg = {"budget": {"max_tokens": 1_000_000, "output_allowance": 1000, "max_steps": 100}}
+    trace_path = tmp_path / "trace.jsonl"
+    trace = Trace(trace_path, "test-run")
+    model = ScriptedModel([
+        reply(submit(P11, label=1)),
+        reply(submit(P11, label=0)),  # tries to change its answer during remediation
+        reply(text="Done."),
+    ])
+    with Workspace(OWASP) as ws:
+        agent = Agent(cfg, ReviewingToolbox(ws, trace), trace, model)
+        agent.run([A11])
+    trace.terminal(TerminalStatus.COMPLETED)
+    events = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert check_trace(events, require_via=False) == []  # HW1's in-process path has no via
+    declined = [e for e in events if e["kind"] == "tool_result" and not e["ok"]]
+    assert len(declined) == 1 and "classification stage" in declined[0]["error"]
+    assert agent.rows[A11["alert_id"]]["label"] == 1
+
+
+class WritingToolbox(ReviewingToolbox):
+    """Pretends edit is a write tool, to test that the runtime declines it while classifying."""
+
+    write_tools = frozenset({"edit"})
+
+
+def test_edit_is_declined_while_classifying(tmp_path):
+    cfg = {"budget": {"max_tokens": 1_000_000, "output_allowance": 1000, "max_steps": 100}}
+    trace_path = tmp_path / "trace.jsonl"
+    trace = Trace(trace_path, "test-run")
+    edit = ToolCall("call_edit", "edit", json.dumps({"path": P11, "old": "a", "new": "b"}))
+    model = ScriptedModel([
+        ModelReply("", [edit], "tool_calls", {"input": 10, "output": 10}, []),
+        reply(submit(P11, label=0)),
+    ])
+    with Workspace(OWASP) as ws:
+        agent = Agent(cfg, WritingToolbox(ws, trace), trace, model)
+        agent.run([A11])
+    trace.terminal(TerminalStatus.COMPLETED)
+    events = [json.loads(line) for line in trace_path.read_text().splitlines()]
+    assert check_trace(events, require_via=False) == []
+    declined = [e for e in events if e["kind"] == "tool_result" and not e["ok"]]
+    assert len(declined) == 1 and "remediation stage" in declined[0]["error"]

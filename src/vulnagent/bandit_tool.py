@@ -35,6 +35,8 @@ def build_command(scan: dict, paths: list[str], out_file: Path) -> list[str]:
     ]
     if scan["exclude"]:
         cmd += ["-x", ",".join(scan["exclude"])]
+    if scan.get("ignore_nosec"):  # only the patch rescans set this; discovery honours # nosec
+        cmd.append("--ignore-nosec")
     return cmd + paths
 
 
